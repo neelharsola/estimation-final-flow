@@ -81,7 +81,7 @@ export default function EstimationsPage() {
           clientName: e.client || "Unknown Client",
           description: e.description || "",
           status: e.status === "under_review" ? "pending_review" : e.status,
-          estimator: e.estimator_name || e.project?.estimator?.name || e.creator_id || "Unknown",
+          estimator: e.estimator_name || e.project?.estimator?.name || "Unknown",
           createdAt: new Date(e.created_at).toISOString().split('T')[0],
           resources: [],
           deliveryTimeline: "TBD"
@@ -117,7 +117,7 @@ export default function EstimationsPage() {
         clientName: full.client || "Unknown Client",
         description: full.description || "",
         status: full.status === "under_review" ? "pending_review" : full.status,
-        estimator: full.estimator_name || full.project?.estimator?.name || full.creator_id || "Unknown",
+        estimator: full.estimator_name || full.project?.estimator?.name || "Unknown",
         createdAt: new Date(full.created_at).toISOString().split('T')[0],
         envelope: full.envelope_data || null,
         currentVersion: full.current_version,

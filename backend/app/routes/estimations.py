@@ -21,6 +21,7 @@ from app.services.estimations import (
     update_resources,
     update_estimation_title_client_desc,
     delete_estimation,
+    update_envelope_data,
 )
 
 
@@ -120,6 +121,15 @@ async def set_resources(estimation_id: str, resources: List[ResourceAllocation],
     if role not in ("estimator", "ops"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can modify resources")
     est = await update_resources(estimation_id, resources)
+    if est is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return est
+# Update full envelope_data for an estimation
+@router.put("/{estimation_id}/envelope", response_model=Estimation)
+async def set_envelope(estimation_id: str, payload: dict, role: str = Depends(get_current_user_role_dep)) -> Estimation:
+    if role not in ("estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can modify envelope")
+    est = await update_envelope_data(estimation_id, payload)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
     return est

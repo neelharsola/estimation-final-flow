@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,6 +20,8 @@ export default function EstimationDetailsPage() {
   const [estimation, setEstimation] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [rows, setRows] = useState<any[]>([]);
+  const [editing, setEditing] = useState<{ row: number; field: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -62,6 +65,7 @@ export default function EstimationDetailsPage() {
           versions: full.versions || [],
         };
         setEstimation(mapped);
+        setRows((mapped.envelope?.rows || []));
         setForm({
           projectTitle: mapped.projectTitle,
           clientName: mapped.clientName,
@@ -91,6 +95,29 @@ export default function EstimationDetailsPage() {
         status: form.status || "in_progress",
       };
       const updated = await api.estimations.update(id, updates);
+      // Persist edited feature rows into envelope
+      try {
+        const existingEnvelope = estimation.envelope || {};
+        const updatedEnvelope = {
+          schema_version: existingEnvelope.schema_version || "1.0",
+          project: {
+            ...(existingEnvelope.project || {}),
+            name: updates.title,
+            client: updates.client,
+            description: updates.description || existingEnvelope.project?.description || "",
+          },
+          rows: rows,
+          ...(existingEnvelope.summary ? { summary: existingEnvelope.summary } : {}),
+        };
+        const estAfterEnvelope = await api.estimations.updateEnvelope(id, updatedEnvelope);
+        // reflect rounding-safe mapping
+        setEstimation((prev: any) => ({
+          ...prev,
+          envelope: estAfterEnvelope.envelope_data || updatedEnvelope,
+        }));
+      } catch (e) {
+        console.error("Failed to update envelope", e);
+      }
       setEstimation({
         ...estimation,
         projectTitle: updated.title,
@@ -127,8 +154,14 @@ export default function EstimationDetailsPage() {
     );
   }
 
-  const rows = estimation.envelope?.rows || [];
   const hoursOf = (r: any) => r?.hours || {};
+  const isEditing = (row: number, field: string) => editing && editing.row === row && editing.field === field;
+  const startEdit = (row: number, field: string) => setEditing({ row, field });
+  const stopEdit = () => setEditing(null);
+
+  const platformOptions = ["NA", "Desktop", "Web", "Mobile", "AI/ML Model"];
+  const makeReuseOptions = ["Make", "Reuse"];
+  const complexityOptions = ["Simple", "Average", "Complex"];
   const baseHours = (r: any) => {
     const h = hoursOf(r);
     return (
@@ -201,7 +234,7 @@ export default function EstimationDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Features</CardTitle>
-          <CardDescription>{rows.length} rows • {grandTotal} base hours</CardDescription>
+          <CardDescription>{rows.length} rows • {(Math.round(grandTotal * 100) / 100).toFixed(2)} base hours</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -231,27 +264,131 @@ export default function EstimationDetailsPage() {
                 {rows.map((r: any, i: number) => (
                   <TableRow key={i}>
                     <TableCell>{i + 1}</TableCell>
-                    <TableCell>{r.platform}</TableCell>
-                    <TableCell>{r.module}</TableCell>
-                    <TableCell>{r.component}</TableCell>
-                    <TableCell className="max-w-[360px] whitespace-pre-wrap">{r.feature}</TableCell>
-                    <TableCell>
-                      {r.make_or_reuse}
-                      {r.reuse_source ? (
-                        <span className="text-xs text-muted-foreground block">{r.reuse_source}</span>
-                      ) : null}
+                    <TableCell onClick={() => startEdit(i, "platform")}>{
+                      isEditing(i, "platform") ? (
+                        <Select value={r.platform || ""} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, platform: value } : row)); stopEdit(); }}>
+                          <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
+                          <SelectContent>
+                            {platformOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="cursor-pointer">{r.platform || "-"}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "module")}>{
+                      isEditing(i, "module") ? (
+                        <Input autoFocus value={r.module || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, module: e.target.value } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{r.module || "-"}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "component")}>{
+                      isEditing(i, "component") ? (
+                        <Input autoFocus value={r.component || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, component: e.target.value } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{r.component || "-"}</span>
+                      )
+                    }</TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap" onClick={() => startEdit(i, "feature")}>{
+                      isEditing(i, "feature") ? (
+                        <Textarea autoFocus rows={2} value={r.feature || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, feature: e.target.value } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{r.feature || "-"}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "make_or_reuse")}>{
+                      isEditing(i, "make_or_reuse") ? (
+                        <Select value={r.make_or_reuse || "Make"} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, make_or_reuse: value } : row)); stopEdit(); }}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {makeReuseOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="cursor-pointer">{r.make_or_reuse || "Make"}</span>
+                      )
+                    }
+                    {r.reuse_source ? (
+                      <span className="text-xs text-muted-foreground block">{r.reuse_source}</span>
+                    ) : null}
                     </TableCell>
-                    <TableCell>{r.complexity}</TableCell>
-                    <TableCell>{r.num_components}</TableCell>
-                    <TableCell>{hoursOf(r).ui_design ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).ui_module ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).backend_logic ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).general ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).service_api ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).db_structure ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).db_programming ?? 0}</TableCell>
-                    <TableCell>{hoursOf(r).db_udf ?? 0}</TableCell>
-                    <TableCell className="text-right font-medium">{baseHours(r)}</TableCell>
+                    <TableCell onClick={() => startEdit(i, "complexity")}>{
+                      isEditing(i, "complexity") ? (
+                        <Select value={r.complexity || "Average"} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, complexity: value } : row)); stopEdit(); }}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {complexityOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="cursor-pointer">{r.complexity || "Average"}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "num_components")}>{
+                      isEditing(i, "num_components") ? (
+                        <Input autoFocus type="number" value={r.num_components ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, num_components: Number(e.target.value) } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{r.num_components ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "ui_design")}>{
+                      isEditing(i, "ui_design") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).ui_design ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_design: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).ui_design ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "ui_module")}>{
+                      isEditing(i, "ui_module") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).ui_module ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_module: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).ui_module ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "backend_logic")}>{
+                      isEditing(i, "backend_logic") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).backend_logic ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), backend_logic: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).backend_logic ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "general")}>{
+                      isEditing(i, "general") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).general ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), general: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).general ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "service_api")}>{
+                      isEditing(i, "service_api") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).service_api ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), service_api: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).service_api ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "db_structure")}>{
+                      isEditing(i, "db_structure") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_structure ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_structure: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).db_structure ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "db_programming")}>{
+                      isEditing(i, "db_programming") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_programming ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_programming: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).db_programming ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell onClick={() => startEdit(i, "db_udf")}>{
+                      isEditing(i, "db_udf") ? (
+                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_udf ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_udf: Number(e.target.value) } } : row))} />
+                      ) : (
+                        <span className="cursor-pointer">{hoursOf(r).db_udf ?? 0}</span>
+                      )
+                    }</TableCell>
+                    <TableCell className="text-right font-medium">{(Math.round(baseHours(r) * 100) / 100).toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

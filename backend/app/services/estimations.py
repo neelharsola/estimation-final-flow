@@ -32,6 +32,52 @@ async def get_estimation(estimation_id: str) -> Optional[Estimation]:
     doc["_id"] = str(doc["_id"])  # serialize
     # add non-aliased id for frontend robustness
     doc["id"] = doc["_id"]
+    # attach estimator name for display
+    try:
+        creator = await db.users.find_one({"_id": ObjectId(str(doc.get("creator_id", "")))}, {"name": 1})
+        if creator and creator.get("name"):
+            doc["estimator_name"] = creator["name"]
+    except Exception:
+        pass
+    # replace version created_by ids with names for display
+    try:
+        def _created_by_to_name(v: dict) -> dict:
+            if not isinstance(v, dict):
+                return v
+            user = None
+            try:
+                user = db.users.find_one({"_id": ObjectId(str(v.get("created_by", "")))}, {"name": 1})
+            except Exception:
+                user = None
+            # db.users.find_one above is not awaited; use motor: need await
+            return v
+        # fetch map for all unique ids
+        ids: set[str] = set()
+        cv = doc.get("current_version") or {}
+        if cv.get("created_by"):
+            ids.add(str(cv["created_by"]))
+        for v in doc.get("versions", []) or []:
+            if isinstance(v, dict) and v.get("created_by"):
+                ids.add(str(v["created_by"]))
+        id_to_name: dict[str, str] = {}
+        for uid in ids:
+            try:
+                u = await db.users.find_one({"_id": ObjectId(uid)}, {"name": 1})
+                if u and u.get("name"):
+                    id_to_name[uid] = u["name"]
+            except Exception:
+                pass
+        if cv and cv.get("created_by") in id_to_name:
+            cv["created_by"] = id_to_name.get(cv.get("created_by"))
+            doc["current_version"] = cv
+        new_versions = []
+        for v in (doc.get("versions") or []):
+            if isinstance(v, dict) and v.get("created_by") in id_to_name:
+                v["created_by"] = id_to_name[v["created_by"]]
+            new_versions.append(v)
+        doc["versions"] = new_versions
+    except Exception:
+        pass
     return Estimation.model_validate(doc)
 
 
@@ -44,8 +90,27 @@ async def list_estimations(created_by: str | None = None) -> List[Estimation]:
     async for doc in db.estimations.find(query).sort("updated_at", -1):
         doc["_id"] = str(doc["_id"])  # serialize
         doc["id"] = doc["_id"]
+        # attach estimator name for display in list
+        try:
+            creator = await db.users.find_one({"_id": ObjectId(str(doc.get("creator_id", "")))}, {"name": 1})
+            if creator and creator.get("name"):
+                doc["estimator_name"] = creator["name"]
+        except Exception:
+            pass
         items.append(Estimation.model_validate(doc))
     return items
+
+
+async def update_envelope_data(estimation_id: str, envelope: dict) -> Optional[Estimation]:
+    db = get_db()
+    now = datetime.utcnow()
+    result = await db.estimations.update_one(
+        {"_id": _oid(estimation_id)},
+        {"$set": {"envelope_data": envelope, "updated_at": now}},
+    )
+    if result.matched_count == 0:
+        return None
+    return await get_estimation(estimation_id)
 
 
 async def update_estimation_title_client_desc(estimation_id: str, payload: dict) -> Optional[Estimation]:

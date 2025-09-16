@@ -112,7 +112,7 @@ async def create_default_admin() -> None:
             # Create admin user directly in database to avoid validation issues
             db = get_db()
             admin_doc = {
-                "name": "System Admin",
+                "name": "MSBC Admin",
                 "email": "admin@msbcgroup.com",
                 "password_hash": get_password_hash("msbc$123"),
                 "role": "Admin",
@@ -126,6 +126,10 @@ async def create_default_admin() -> None:
             if existing.role != "Admin":
                 await update_user(existing.id, {"role": "Admin"})
                 logger.info("Updated existing admin user role")
+            # Ensure display name is MSBC Admin
+            if existing.name != "MSBC Admin":
+                await update_user(existing.id, {"name": "MSBC Admin"})
+                logger.info("Updated admin user name to MSBC Admin")
             else:
                 logger.info("Admin user already exists with correct role")
     except Exception as e:
