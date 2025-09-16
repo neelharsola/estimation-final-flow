@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
-import EstimationsNew from "./pages/EstimationsNew";
+import EstimationsPage from "./pages/EstimationsNew";
+import EstimationDetailsPage from "./pages/EstimationDetailsPage";
 import EstimatePage from "./pages/EstimatePage";
 import PricingNew from "./pages/PricingNew";
 import Pricing from "./pages/Pricing";
@@ -32,11 +33,15 @@ const App = () => (
           className="toaster group"
           toastOptions={{
             classNames: {
-              toast: "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-              description: "group-[.toast]:text-muted-foreground",
-              actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-              cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+              toast: "group toast bg-white text-foreground border border-border shadow-lg",
+              title: "text-foreground",
+              description: "text-muted-foreground",
+              actionButton: "bg-primary text-primary-foreground",
+              cancelButton: "bg-muted text-foreground",
+              success: "bg-white text-foreground",
+              error: "bg-white text-red-600",
             },
+            duration: 4000,
           }}
         />
         <BrowserRouter>
@@ -60,8 +65,28 @@ const App = () => (
             element={
               <RequireAuth>
                 <AppLayout>
-                  <EstimationsNew />
+                  <EstimationsPage />
                 </AppLayout>  
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/estimations/:id"
+            element={
+              <RequireAuth>
+                <AppLayout>
+                  <EstimationDetailsPage />
+                </AppLayout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/estimations/view"
+            element={
+              <RequireAuth>
+                <AppLayout>
+                  <EstimationDetailsPage />
+                </AppLayout>
               </RequireAuth>
             }
           />

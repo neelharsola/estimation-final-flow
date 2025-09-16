@@ -65,6 +65,9 @@ export const api = {
   },
   estimations: {
     list: () => request("/estimations"),
+    get: (id: string) => request(`/estimations/${id}`),
+    update: (id: string, updates: Record<string, unknown>) => request(`/estimations/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+    delete: (id: string) => request(`/estimations/${id}`, { method: "DELETE" }),
   },
   users: {
     list: () => request("/api/v1/users"),

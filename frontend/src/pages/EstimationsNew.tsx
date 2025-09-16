@@ -36,6 +36,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import EstimationStepper from "@/components/forms/EstimationStepper";
+import EstimationDetailsDialog from "@/components/dialogs/EstimationDetailsDialog";
+import { useNavigate, Link } from "react-router-dom";
+import { toast as sonnerToast } from "sonner";
 import { api } from "@/lib/api";
 
 // No static data - all data loaded from backend
@@ -55,47 +58,77 @@ const getStatusBadge = (status: string) => {
   }
 };
 
-export default function EstimationsNew() {
+export default function EstimationsPage() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [estimations, setEstimations] = useState<any[]>([]);
   const [isStepperOpen, setIsStepperOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedEstimation, setSelectedEstimation] = useState<any | null>(null);
 
   // Load estimations from backend
-  useEffect(() => {
-    const loadEstimations = async () => {
-      try {
-        const data = await api.estimations.list();
-        const mapped = data.map((e: any) => ({
-          id: e.id,
+  const loadEstimations = async () => {
+    try {
+      const data = await api.estimations.list();
+      const mapped = data.map((e: any) => {
+        const rawId = (e?.id ?? e?._id ?? e?._id?.$oid ?? e?._id?.["$oid"]) as string | undefined;
+        return {
+          id: rawId,
           projectTitle: e.title || "Untitled Project",
           clientName: e.client || "Unknown Client",
           description: e.description || "",
           status: e.status === "under_review" ? "pending_review" : e.status,
-          estimator: e.creator_id || "Unknown",
+          estimator: e.estimator_name || e.project?.estimator?.name || e.creator_id || "Unknown",
           createdAt: new Date(e.created_at).toISOString().split('T')[0],
           resources: [],
           deliveryTimeline: "TBD"
-        }));
-        setEstimations(mapped);
-      } catch (error) {
-        console.error("Failed to load estimations:", error);
-        setEstimations([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+        };
+      });
+      setEstimations(mapped);
+    } catch (error) {
+      console.error("Failed to load estimations:", error);
+      sonnerToast.error("Failed to load estimations");
+      setEstimations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadEstimations();
   }, []);
 
-  const handleEstimationComplete = (newEstimation: any) => {
-    setEstimations(prev => [newEstimation, ...prev]);
+  const handleEstimationComplete = async () => {
+    setLoading(true);
+    await loadEstimations();
   };
 
   // Removed page-level quick upload; use Stepper's upload instead
+
+  const openDetails = async (id: string) => {
+    try {
+      const full = await api.estimations.get(id);
+      const mapped = {
+        id: full.id,
+        projectTitle: full.title || "Untitled Project",
+        clientName: full.client || "Unknown Client",
+        description: full.description || "",
+        status: full.status === "under_review" ? "pending_review" : full.status,
+        estimator: full.estimator_name || full.project?.estimator?.name || full.creator_id || "Unknown",
+        createdAt: new Date(full.created_at).toISOString().split('T')[0],
+        envelope: full.envelope_data || null,
+        currentVersion: full.current_version,
+        versions: full.versions || [],
+      };
+      setSelectedEstimation(mapped);
+      setDetailsOpen(true);
+    } catch (e) {
+      console.error("Failed to load estimation details", e);
+    }
+  };
 
   const filteredEstimations = estimations.filter((estimation) => {
     const matchesSearch = estimation.projectTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -213,8 +246,10 @@ export default function EstimationsNew() {
                           <Calculator className="w-4 h-4 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium">{estimation.projectTitle}</p>
-                          <p className="text-sm text-muted-foreground">{estimation.id}</p>
+                          <Link to={estimation.id ? `/estimations/${estimation.id}` : "/estimations/view"} state={estimation.id ? { estimation: estimation.id } : { row: estimation }} className="font-medium text-primary hover:underline">
+                            {estimation.projectTitle}
+                          </Link>
+                          <p className="text-sm text-muted-foreground">{estimation.id || "(missing id)"}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -235,7 +270,10 @@ export default function EstimationsNew() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            if (estimation.id) navigate(`/estimations/${estimation.id}`);
+                            else navigate('/estimations/view', { state: { row: estimation } });
+                          }}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
@@ -257,6 +295,18 @@ export default function EstimationsNew() {
           )}
         </CardContent>
       </Card>
+
+      {/* Estimation Details Dialog */}
+      <EstimationDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        estimation={selectedEstimation}
+        onUpdate={(updated) => {
+          // frontend-only update
+          setSelectedEstimation(updated);
+          setEstimations((prev) => prev.map(e => e.id === updated.id ? { ...e, projectTitle: updated.projectTitle ?? e.projectTitle, clientName: updated.clientName ?? e.clientName, status: updated.status ?? e.status, estimator: updated.estimator ?? e.estimator } : e));
+        }}
+      />
     </div>
   );
 }

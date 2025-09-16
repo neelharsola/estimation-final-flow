@@ -19,6 +19,8 @@ from app.services.estimations import (
     snapshot_version,
     update_features,
     update_resources,
+    update_estimation_title_client_desc,
+    delete_estimation,
 )
 
 
@@ -77,6 +79,30 @@ async def get_one(estimation_id: str) -> Estimation:
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
     return est
+
+
+@router.patch("/{estimation_id}", response_model=Estimation)
+async def update_basic(
+    estimation_id: str,
+    payload: dict,
+    role: str = Depends(get_current_user_role_dep)
+) -> Estimation:
+    if role not in ("estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can update")
+    est = await update_estimation_title_client_desc(estimation_id, payload)
+    if est is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return est
+
+
+@router.delete("/{estimation_id}")
+async def remove(estimation_id: str, role: str = Depends(get_current_user_role_dep)) -> dict:
+    if role not in ("estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can delete")
+    ok = await delete_estimation(estimation_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"deleted": True}
 
 
 @router.put("/{estimation_id}/features", response_model=Estimation)

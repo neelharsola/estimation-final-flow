@@ -61,6 +61,7 @@ async def ensure_indexes() -> None:
         # Legacy indexes (for backwards compatibility)
         await _db.estimations.create_index("client")
         await _db.estimations.create_index("status")
+        await _db.estimations.create_index("title", unique=True)
         await _db.pricing_rates.create_index([("role", 1), ("region", 1), ("version", -1)])
         
         print("Database indexes created successfully")

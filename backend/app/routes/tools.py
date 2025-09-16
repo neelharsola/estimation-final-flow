@@ -63,9 +63,11 @@ async def process_estimation_json(
         # Save JSON to temp file
         json_path.write_text(json_content.decode("utf-8"), encoding="utf-8")
         
-        # Find template file
+        # Find template file (prefer FILLED template if available to preserve formulas)
         script_dir = Path(__file__).resolve().parents[2] / "data scripts"
-        template_source = script_dir / "sample.xlsx"
+        preferred_filled = script_dir / "sample.FILLED.xlsx"
+        default_sample = script_dir / "sample.xlsx"
+        template_source = preferred_filled if preferred_filled.exists() else default_sample
         
         # Create template if it doesn't exist
         if not template_source.exists():
@@ -139,21 +141,41 @@ async def process_estimation_json(
             
             if proc.returncode == 0 and outbook_path.exists():
                 print(f"✅ Excel file generated successfully: {outbook_path}")
-                return FileResponse(
-                    str(outbook_path), 
+                # Persist file beyond TemporaryDirectory lifetime
+                import tempfile as _tf
+                import os as _os
+                with _tf.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+                    tmp_path = Path(tmp.name)
+                    shutil.copy2(outbook_path, tmp_path)
+                response = FileResponse(
+                    str(tmp_path), 
                     filename=outbook_path.name,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+                async def _cleanup_tmp():
+                    try:
+                        await asyncio.sleep(10)
+                        _os.remove(tmp_path)
+                    except Exception:
+                        pass
+                asyncio.create_task(_cleanup_tmp())
+                return response
             else:
                 print(f"❌ Script failed with return code: {proc.returncode}")
+                if stderr:
+                    raise HTTPException(status_code=500, detail=f"Excel population failed: {stderr.decode()}")
                 
         except Exception as e:
             print(f"💥 Script execution failed: {e}")
 
-        # Last resort: return template with basic info
+        # Last resort: return template with basic info (persist copy)
         if template_path.exists():
+            import tempfile as _tf
+            with _tf.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+                tmp_path = Path(tmp.name)
+                shutil.copy2(template_path, tmp_path)
             return FileResponse(
-                str(template_path), 
+                str(tmp_path), 
                 filename=f"estimation_template_{timestamp}.xlsx",
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )

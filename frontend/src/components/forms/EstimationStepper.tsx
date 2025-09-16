@@ -245,6 +245,16 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       return;
     }
 
+    // Duplicate project name check
+    try {
+      const existing = await api.estimations.list();
+      const titles = (existing || []).map((e: any) => (e.title || e.name || "").toLowerCase());
+      if (titles.includes(estimationData.project.name.trim().toLowerCase())) {
+        sonnerToast.error("Project name already exists. Please choose a different name.");
+        return;
+      }
+    } catch {}
+
     setIsProcessing(true);
     try {
       // Create JSON file from current data with updated structure
@@ -253,7 +263,11 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
         project: {
           name: estimationData.project.name,
           client: estimationData.project.client,
-          description: estimationData.project.description || ""
+          description: estimationData.project.description || "",
+          estimator: {
+            name: user?.name || "Unknown",
+            id: 1
+          }
         },
         rows: estimationData.rows.length > 0 ? estimationData.rows : []
       };
@@ -276,7 +290,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       a.click();
       URL.revokeObjectURL(url);
 
-      sonnerToast.success("Excel file generated and downloaded successfully! Estimation saved to database.");
+      sonnerToast.success("Excel generated and estimation saved.");
       
       // Notify parent component and close
       if (onComplete) {
@@ -284,7 +298,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           id: `EST-${Date.now()}`,
           projectTitle: estimationData.project.name,
           clientName: estimationData.project.client,
-          status: "draft",
+          status: "in_progress",
           estimator: user?.name || "Unknown",
           createdAt: new Date().toISOString().split('T')[0],
           description: estimationData.project.description || `Estimation with ${estimationData.rows.length} features`
@@ -293,9 +307,22 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       }
       
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Processing error:", error);
-      sonnerToast.error("Failed to process estimation. Please try again.");
+      const message = error?.message || "Failed to process estimation. Please try again.";
+      sonnerToast.error(message);
+      if (onComplete) {
+        const failed = {
+          id: `EST-${Date.now()}`,
+          projectTitle: estimationData.project.name,
+          clientName: estimationData.project.client,
+          status: "failed",
+          estimator: user?.name || "Unknown",
+          createdAt: new Date().toISOString().split('T')[0],
+          description: estimationData.project.description || `Estimation with ${estimationData.rows.length} features`
+        };
+        onComplete(failed);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -410,24 +437,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 2:
         return (
           <div className="space-y-6">
-            {/* JSON Upload Section - Also available in Step 2 */}
-            <Card className="p-4 bg-blue-50 border-blue-200">
-              <div className="flex items-center gap-4">
-                <div className="space-y-2 flex-1">
-                  <Label htmlFor="json-upload-step2">📁 Upload Estimation JSON to Auto-Populate All Features</Label>
-                  <Input
-                    id="json-upload-step2"
-                    type="file"
-                    accept=".json"
-                    onChange={handleJSONUpload}
-                    className="cursor-pointer bg-white"
-                  />
-                  <p className="text-sm text-blue-600">
-                    Upload your estimate.json file to automatically populate all features and skip manual entry
-                  </p>
-                </div>
-              </div>
-            </Card>
+            
             
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Feature Breakdown</h3>
@@ -702,7 +712,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 4:
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Review & Generate</h3>
+            <h3 className="text-lg font-semibold">Review & Save</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="p-4">
@@ -715,6 +725,10 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimator:</span>
                     <span>{user?.name || "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Client:</span>
+                    <span>{estimationData.project.client}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Features:</span>
@@ -749,13 +763,53 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                 </div>
               </Card>
             </div>
+
+            <Card className="p-4">
+              <h4 className="font-medium mb-4">All Features</h4>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Platform</TableHead>
+                      <TableHead>Module</TableHead>
+                      <TableHead>Component</TableHead>
+                      <TableHead>Feature</TableHead>
+                      <TableHead>Make/Reuse</TableHead>
+                      <TableHead>Complexity</TableHead>
+                      <TableHead>Components</TableHead>
+                      <TableHead className="text-right">Hours</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {estimationData.rows.map((row, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{row.platform}</TableCell>
+                        <TableCell>{row.module}</TableCell>
+                        <TableCell>{row.component}</TableCell>
+                        <TableCell className="max-w-[320px] whitespace-pre-wrap">{row.feature}</TableCell>
+                        <TableCell>
+                          {row.make_or_reuse}
+                          {row.make_or_reuse === "Reuse" && row.reuse_source ? (
+                            <span className="text-xs text-muted-foreground block">{row.reuse_source}</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{row.complexity}</TableCell>
+                        <TableCell>{row.num_components}</TableCell>
+                        <TableCell className="text-right">{calculateTotalHours(row)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
             
             <Card className="p-6">
               <div className="text-center space-y-4">
-                <h4 className="text-xl font-semibold">Generate Excel Report</h4>
+                <h4 className="text-xl font-semibold">Save Estimation</h4>
                 <p className="text-muted-foreground">
-                  This will process your estimation data and generate a detailed Excel workbook 
-                  with all features, resource allocations, and calculations.
+                  Review all details above. Click save to generate and download the Excel and persist the estimation.
                 </p>
                 <Button
                   onClick={handleProcessAndDownload}
@@ -766,12 +820,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   {isProcessing ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Processing...
+                      Saving...
                     </>
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      Generate & Download Excel
+                      Save Estimation
                     </>
                   )}
                 </Button>
@@ -787,7 +841,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-primary" />

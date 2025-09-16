@@ -38,9 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(normalized);
     } catch (error) {
       console.error('Failed to fetch user:', error);
-      // Clear tokens if user fetch fails
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      // Do not clear tokens on transient errors; keep session
       setUser(null);
     } finally {
       setLoading(false);

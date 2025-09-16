@@ -1,0 +1,302 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import { api } from "@/lib/api";
+import { Calendar, ArrowLeft } from "lucide-react";
+
+export default function EstimationDetailsPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [estimation, setEstimation] = useState<any | null>(null);
+  const [form, setForm] = useState<any>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const stateData: any = (location.state as any) || {};
+        const stateId = stateData?.estimation || stateData?.id;
+        const effectiveId = id && id !== "null" && id !== "undefined" ? id : stateId;
+        let full;
+        if (effectiveId) {
+          full = await api.estimations.get(effectiveId);
+        } else if (stateData?.row) {
+          // Fallback: use row from list to render a partial view
+          full = {
+            id: stateData.row.id,
+            title: stateData.row.projectTitle,
+            client: stateData.row.clientName,
+            description: stateData.row.description,
+            status: stateData.row.status,
+            created_at: new Date().toISOString(),
+            envelope_data: null,
+            current_version: { version_number: 1, features: [], resources: [], created_by: "", created_at: new Date().toISOString(), notes: null },
+            versions: [],
+          };
+        } else {
+          setError("Missing estimation context");
+          setLoading(false);
+          return;
+        }
+        const mapped = {
+          id: full.id || full._id,
+          projectTitle: full.title || "Untitled Project",
+          clientName: full.client || "Unknown Client",
+          description: full.description || "",
+          status: full.status === "under_review" ? "pending_review" : full.status,
+          estimator: full.estimator_name || full.project?.estimator?.name || full.creator_id || "Unknown",
+          createdAt: new Date(full.created_at).toISOString().split('T')[0],
+          envelope: full.envelope_data || null,
+          currentVersion: full.current_version,
+          versions: full.versions || [],
+        };
+        setEstimation(mapped);
+        setForm({
+          projectTitle: mapped.projectTitle,
+          clientName: mapped.clientName,
+          description: mapped.description,
+          status: mapped.status,
+          estimator: mapped.estimator,
+        });
+      } catch (e: any) {
+        setError(e?.message || "Failed to load estimation");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [id]);
+
+  const onChange = (field: string, value: any) => setForm((p: any) => ({ ...p, [field]: value }));
+
+  const onSave = async () => {
+    if (!id) return;
+    setSaving(true);
+    try {
+      const updates: any = {
+        title: form.projectTitle,
+        client: form.clientName,
+        description: form.description,
+        status: form.status || "in_progress",
+      };
+      const updated = await api.estimations.update(id, updates);
+      setEstimation({
+        ...estimation,
+        projectTitle: updated.title,
+        clientName: updated.client,
+        description: updated.description,
+        status: updated.status,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!id) return;
+    try {
+      await api.estimations.delete(id);
+      navigate(-1);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  if (loading) {
+    return <div className="p-6">Loading...</div>;
+  }
+  if (error || !estimation) {
+    return (
+      <div className="p-6">
+        <Button variant="outline" onClick={() => navigate(-1)} className="mb-4"><ArrowLeft className="w-4 h-4 mr-2"/>Back</Button>
+        <div className="text-red-600">{error || "Not found"}</div>
+      </div>
+    );
+  }
+
+  const rows = estimation.envelope?.rows || [];
+  const hoursOf = (r: any) => r?.hours || {};
+  const baseHours = (r: any) => {
+    const h = hoursOf(r);
+    return (
+      (Number(h.ui_design) || 0) +
+      (Number(h.ui_module) || 0) +
+      (Number(h.backend_logic) || 0) +
+      (Number(h.general) || 0) +
+      (Number(h.service_api) || 0) +
+      (Number(h.db_structure) || 0) +
+      (Number(h.db_programming) || 0) +
+      (Number(h.db_udf) || 0)
+    );
+  };
+  const grandTotal = rows.reduce((sum: number, r: any) => sum + baseHours(r), 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Estimation Details</h1>
+          <p className="text-muted-foreground">ID: {estimation.id}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate(-1)}><ArrowLeft className="w-4 h-4 mr-2"/>Back</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          <Button variant="destructive" onClick={onDelete}>Delete</Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Project</CardTitle>
+          <CardDescription>Top-level information</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm">Project Title</label>
+              <Input value={form.projectTitle} onChange={(e) => onChange("projectTitle", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm">Client</label>
+              <Input value={form.clientName} onChange={(e) => onChange("clientName", e.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-sm">Description</label>
+              <Textarea rows={3} value={form.description} onChange={(e) => onChange("description", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm">Status</label>
+              <div>
+                <Badge variant="outline">{form.status}</Badge>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm">Estimator</label>
+              <Input value={form.estimator} onChange={(e) => onChange("estimator", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm">Created</label>
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="w-4 h-4" />
+                {estimation.createdAt}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Features</CardTitle>
+          <CardDescription>{rows.length} rows • {grandTotal} base hours</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Module</TableHead>
+                  <TableHead>Component</TableHead>
+                  <TableHead>Feature</TableHead>
+                  <TableHead>Make/Reuse</TableHead>
+                  <TableHead>Complexity</TableHead>
+                  <TableHead>Components</TableHead>
+                  <TableHead>UI Design</TableHead>
+                  <TableHead>UI Module</TableHead>
+                  <TableHead>BL</TableHead>
+                  <TableHead>General</TableHead>
+                  <TableHead>Service/API</TableHead>
+                  <TableHead>DB Struct.</TableHead>
+                  <TableHead>DB Prog.</TableHead>
+                  <TableHead>DB UDF</TableHead>
+                  <TableHead className="text-right">Base Hours</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r: any, i: number) => (
+                  <TableRow key={i}>
+                    <TableCell>{i + 1}</TableCell>
+                    <TableCell>{r.platform}</TableCell>
+                    <TableCell>{r.module}</TableCell>
+                    <TableCell>{r.component}</TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap">{r.feature}</TableCell>
+                    <TableCell>
+                      {r.make_or_reuse}
+                      {r.reuse_source ? (
+                        <span className="text-xs text-muted-foreground block">{r.reuse_source}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>{r.complexity}</TableCell>
+                    <TableCell>{r.num_components}</TableCell>
+                    <TableCell>{hoursOf(r).ui_design ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).ui_module ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).backend_logic ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).general ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).service_api ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).db_structure ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).db_programming ?? 0}</TableCell>
+                    <TableCell>{hoursOf(r).db_udf ?? 0}</TableCell>
+                    <TableCell className="text-right font-medium">{baseHours(r)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Versions</CardTitle>
+          <CardDescription>
+            Current: v{estimation.currentVersion?.version_number ?? estimation.current_version?.version_number ?? "1"} • Total { (estimation.versions?.length ?? 0) + 1 }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Created By</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[
+                  estimation.currentVersion || estimation.current_version,
+                  ...(estimation.versions || [])
+                ].filter(Boolean).map((v: any, idx: number) => (
+                  <TableRow key={idx}>
+                    <TableCell>{idx + 1}</TableCell>
+                    <TableCell>v{v.version_number}</TableCell>
+                    <TableCell>{v.created_by}</TableCell>
+                    <TableCell>{new Date(v.created_at).toISOString().split('T')[0]}</TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap">{v.notes || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

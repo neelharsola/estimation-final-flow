@@ -30,6 +30,8 @@ async def get_estimation(estimation_id: str) -> Optional[Estimation]:
     if not doc:
         return None
     doc["_id"] = str(doc["_id"])  # serialize
+    # add non-aliased id for frontend robustness
+    doc["id"] = doc["_id"]
     return Estimation.model_validate(doc)
 
 
@@ -41,8 +43,33 @@ async def list_estimations(created_by: str | None = None) -> List[Estimation]:
         query["creator_id"] = created_by
     async for doc in db.estimations.find(query).sort("updated_at", -1):
         doc["_id"] = str(doc["_id"])  # serialize
+        doc["id"] = doc["_id"]
         items.append(Estimation.model_validate(doc))
     return items
+
+
+async def update_estimation_title_client_desc(estimation_id: str, payload: dict) -> Optional[Estimation]:
+    db = get_db()
+    now = datetime.utcnow()
+    updates: dict = {"updated_at": now}
+    if "title" in payload:
+        updates["title"] = payload["title"]
+    if "client" in payload:
+        updates["client"] = payload["client"]
+    if "description" in payload:
+        updates["description"] = payload["description"]
+    if "status" in payload:
+        updates["status"] = payload["status"]
+    result = await db.estimations.update_one({"_id": _oid(estimation_id)}, {"$set": updates})
+    if result.matched_count == 0:
+        return None
+    return await get_estimation(estimation_id)
+
+
+async def delete_estimation(estimation_id: str) -> bool:
+    db = get_db()
+    res = await db.estimations.delete_one({"_id": _oid(estimation_id)})
+    return res.deleted_count > 0
 
 
 async def update_features(estimation_id: str, features: list[Feature]) -> Optional[Estimation]:
