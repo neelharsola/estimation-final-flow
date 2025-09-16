@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ from bson import ObjectId
 
 from app.db.mongo import get_db
 from app.models.estimation import Estimation, EstimationVersion, Feature, ResourceAllocation, ReviewRecord
+from app.services.excel import ExcelService
 
 
 def _oid(id_str: str) -> ObjectId:
@@ -110,7 +112,10 @@ async def update_envelope_data(estimation_id: str, envelope: dict) -> Optional[E
     )
     if result.matched_count == 0:
         return None
-    return await get_estimation(estimation_id)
+    est = await get_estimation(estimation_id)
+    if est:
+        asyncio.create_task(ExcelService.generate_excel(est))
+    return est
 
 
 async def update_estimation_title_client_desc(estimation_id: str, payload: dict) -> Optional[Estimation]:

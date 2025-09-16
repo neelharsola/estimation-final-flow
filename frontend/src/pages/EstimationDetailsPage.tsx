@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Calendar, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 export default function EstimationDetailsPage() {
   const { id } = useParams();
@@ -26,139 +27,114 @@ export default function EstimationDetailsPage() {
   const [editing, setEditing] = useState<{ row: number; field: string } | null>(null);
   const [users, setUsers] = useState<any[]>([]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const stateData: any = (location.state as any) || {};
-        const stateId = stateData?.estimation || stateData?.id;
-        const effectiveId = id && id !== "null" && id !== "undefined" ? id : stateId;
-        let full;
-        if (effectiveId) {
-          full = await api.estimations.get(effectiveId);
-        } else if (stateData?.row) {
-          // Fallback: use row from list to render a partial view
-          full = {
-            id: stateData.row.id,
-            title: stateData.row.projectTitle,
-            client: stateData.row.clientName,
-            description: stateData.row.description,
-            status: stateData.row.status,
-            created_at: new Date().toISOString(),
-            envelope_data: null,
-            current_version: { version_number: 1, features: [], resources: [], created_by: "", created_at: new Date().toISOString(), notes: null },
-            versions: [],
-          };
-        } else {
-          setError("Missing estimation context");
-          setLoading(false);
-          return;
-        }
-        const mapped = {
-          id: full.id || full._id,
-          projectTitle: full.title || "Untitled Project",
-          clientName: full.client || "Unknown Client",
-          description: full.description || "",
-          status: full.status === "under_review" ? "pending_review" : full.status,
-          estimator: full.estimator_name || "Unknown",
-          estimatorId: full.creator_id || "",
-          createdAt: new Date(full.created_at).toISOString().split('T')[0],
-          envelope: full.envelope_data || null,
-          currentVersion: full.current_version,
-          versions: full.versions || [],
-        };
-        setEstimation(mapped);
-        setRows((mapped.envelope?.rows || []));
-        setForm({
-          projectTitle: mapped.projectTitle,
-          clientName: mapped.clientName,
-          description: mapped.description,
-          status: mapped.status,
-          estimator: mapped.estimator,
-          estimatorId: mapped.estimatorId,
-        });
-        // Fetch users for estimator dropdown
+  const loadEstimation = useCallback(async () => {
+    if (!id) {
+      setError("Missing estimation ID");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const full = await api.estimations.get(id);
+      const mapped = {
+        id: full.id || full._id,
+        projectTitle: full.title || "Untitled Project",
+        clientName: full.client || "Unknown Client",
+        description: full.description || "",
+        status: full.status === "under_review" ? "pending_review" : full.status,
+        estimator: full.estimator_name || "Unknown",
+        estimatorId: full.creator_id || "",
+        createdAt: new Date(full.created_at).toISOString().split('T')[0],
+        envelope: full.envelope_data || null,
+        currentVersion: full.current_version,
+        versions: full.versions || [],
+      };
+      setEstimation(mapped);
+      setRows(mapped.envelope?.rows || []);
+      setForm({
+        projectTitle: mapped.projectTitle,
+        clientName: mapped.clientName,
+        description: mapped.description,
+        status: mapped.status,
+        estimator: mapped.estimator,
+        estimatorId: mapped.estimatorId,
+      });
+      if (users.length === 0) {
         try {
           const allUsers = await api.users.list();
           setUsers(allUsers || []);
         } catch {}
-      } catch (e: any) {
-        setError(e?.message || "Failed to load estimation");
-      } finally {
-        setLoading(false);
       }
-    };
-    load();
-  }, [id]);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load estimation");
+    } finally {
+      setLoading(false);
+    }
+  }, [id, users]);
+
+  useEffect(() => {
+    loadEstimation();
+  }, [id, loadEstimation]);
 
   const onChange = (field: string, value: any) => setForm((p: any) => ({ ...p, [field]: value }));
 
   const onSave = async () => {
     if (!id) return;
     setSaving(true);
+    let saved = false;
     try {
-      // Build partial updates only for changed fields
       const updates: any = {};
       if (form.projectTitle !== estimation.projectTitle) updates.title = form.projectTitle;
       if (form.clientName !== estimation.clientName) updates.client = form.clientName;
       if (form.description !== estimation.description) updates.description = form.description;
       if ((form.status || "in_progress") !== estimation.status) updates.status = form.status || "in_progress";
-      // Only admin can change creator_id; and only if changed
+      
       const isAdmin = String(user?.role || "").toLowerCase() === "admin";
       if (isAdmin && (form.estimatorId || "") !== (estimation.estimatorId || "")) {
         updates.creator_id = form.estimatorId;
       }
 
-      let updatedBasics: any = null;
       if (Object.keys(updates).length > 0) {
-        updatedBasics = await api.estimations.update(id, updates);
-        setEstimation((prev: any) => ({
-          ...prev,
-          projectTitle: updatedBasics.title ?? prev.projectTitle,
-          clientName: updatedBasics.client ?? prev.clientName,
-          description: updatedBasics.description ?? prev.description,
-          status: updatedBasics.status ?? prev.status,
-          estimatorId: updates.creator_id ?? prev.estimatorId,
-          estimator: (() => {
-            if (!updates.creator_id) return prev.estimator;
-            const match = users.find(u => (u.id || u._id) === updates.creator_id);
-            return match?.name || prev.estimator;
-          })(),
-        }));
+        await api.estimations.update(id, updates);
+        saved = true;
       }
 
-      // Persist envelope only if rows or project fields affecting envelope changed
       const existingEnvelope = estimation.envelope || {};
       const prevRowsStr = JSON.stringify(existingEnvelope.rows || []);
       const newRowsStr = JSON.stringify(rows || []);
       const envelopeProjectChanged = (
-        (updates.title !== undefined) ||
-        (updates.client !== undefined) ||
-        (updates.description !== undefined) ||
-        (updates.creator_id !== undefined)
+        updates.title !== undefined ||
+        updates.client !== undefined ||
+        updates.description !== undefined ||
+        updates.creator_id !== undefined
       );
+
       if (newRowsStr !== prevRowsStr || envelopeProjectChanged) {
         const updatedEnvelope = {
           schema_version: existingEnvelope.schema_version || "1.0",
           project: {
             ...(existingEnvelope.project || {}),
-            name: (updates.title ?? estimation.projectTitle),
-            client: (updates.client ?? estimation.clientName),
-            description: (updates.description ?? existingEnvelope.project?.description ?? ""),
-            estimator: { id: (updates.creator_id ?? estimation.estimatorId ?? 0), name: (form.estimator || estimation.estimator || "") },
+            name: form.projectTitle,
+            client: form.clientName,
+            description: form.description,
+            estimator: { id: form.estimatorId, name: users.find(u => u.id === form.estimatorId)?.name || form.estimator },
           },
           rows: rows,
           ...(existingEnvelope.summary ? { summary: existingEnvelope.summary } : {}),
         };
-        const estAfterEnvelope = await api.estimations.updateEnvelope(id, updatedEnvelope);
-        setEstimation((prev: any) => ({
-          ...prev,
-          envelope: estAfterEnvelope.envelope_data || updatedEnvelope,
-        }));
+        await api.estimations.updateEnvelope(id, updatedEnvelope);
+        saved = true;
       }
-    } catch (e) {
+
+      if (saved) {
+        toast.success("Estimation saved successfully!");
+        await loadEstimation();
+      } else {
+        toast.info("No changes to save.");
+      }
+    } catch (e: any) {
       console.error(e);
+      toast.error(e.message || "Failed to save estimation. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -208,6 +184,8 @@ export default function EstimationDetailsPage() {
     );
   };
   const grandTotal = rows.reduce((sum: number, r: any) => sum + baseHours(r), 0);
+  const totalWithContingency = rows.reduce((sum: number, r: any) => sum + (baseHours(r) * (1 + (Number(r.contingency_pct) || 0))), 0);
+  const summary = estimation?.envelope?.summary || {};
 
   return (
     <div className="space-y-6">
@@ -471,6 +449,33 @@ export default function EstimationDetailsPage() {
                 ))}
               </TableBody>
             </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Project Summary</CardTitle>
+          <CardDescription>Calculated totals for the entire project estimation.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Total Base Hours</p>
+              <p className="text-2xl font-bold">{grandTotal.toFixed(2)}</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Total Hours w/ Contingency</p>
+              <p className="text-2xl font-bold">{totalWithContingency.toFixed(2)}</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Total Working Days</p>
+              <p className="text-2xl font-bold">{summary.single_resource_duration_days || 'N/A'}</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Duration (Months)</p>
+              <p className="text-2xl font-bold">{summary.single_resource_duration_months || 'N/A'}</p>
+            </div>
           </div>
         </CardContent>
       </Card>

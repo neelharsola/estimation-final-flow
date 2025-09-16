@@ -129,9 +129,30 @@ async def set_resources(estimation_id: str, resources: List[ResourceAllocation],
     return est
 # Update full envelope_data for an estimation
 @router.put("/{estimation_id}/envelope", response_model=Estimation)
-async def set_envelope(estimation_id: str, payload: dict, role: str = Depends(get_current_user_role_dep)) -> Estimation:
-    if role not in ("estimator", "ops"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can modify envelope")
+async def set_envelope(
+    estimation_id: str,
+    payload: dict,
+    user_id: str = Depends(get_current_user_id),
+    role: str = Depends(get_current_user_role_dep),
+) -> Estimation:
+    # Check permissions: Admin and Ops can edit any. Estimators can only edit their own.
+    if role not in ("admin", "ops"):
+        if role == "estimator":
+            existing_est = await get_estimation(estimation_id)
+            if not existing_est:
+                raise HTTPException(status_code=404, detail="Not found")
+            if existing_est.creator_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Estimators can only modify their own estimations.",
+                )
+        else:
+            # Deny any other role
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to modify the envelope.",
+            )
+
     est = await update_envelope_data(estimation_id, payload)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")

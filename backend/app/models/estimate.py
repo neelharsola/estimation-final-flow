@@ -57,7 +57,7 @@ class EstimateRow(BaseModel):
 
 
 class Estimator(BaseModel):
-    id: int
+    id: str
     name: str
 
 

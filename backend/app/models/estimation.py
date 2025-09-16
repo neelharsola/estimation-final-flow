@@ -53,7 +53,7 @@ class EstimationRow(BaseModel):
 
 class Estimator(BaseModel):
     name: str
-    id: int
+    id: str
 
 
 class ProjectInfo(BaseModel):

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export default function Dashboard() {
   });
   const [recentEstimations, setRecentEstimations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -67,7 +69,7 @@ export default function Dashboard() {
     };
 
     loadDashboardData();
-  }, []);
+  }, [location]);
 
   const statsData = [
     { title: "Active Estimations", value: stats.active_estimations, icon: Calculator, color: "text-blue-500" },
