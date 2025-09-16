@@ -1,0 +1,22 @@
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test, type checker, and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generic caches
+.cache/
+
+# Virtual environments and local env files
+.venv/
+venv/
+.env
+.env.*
+
+# Build artifacts
+build/
+dist/

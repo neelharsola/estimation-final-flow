@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estimation & Proposal Manager Design System - Modern Dark Mode with Orange Primary */
+
+@layer base {
+  :root {
+    /* Dark mode base colors */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Orange primary theme */
+    --primary: 22 93% 53%;
+    --primary-foreground: 0 0% 98%;
+    --primary-glow: 22 93% 63%;
+
+    --secondary: 240 6% 10%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 6% 10%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 6% 10%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 6% 20%;
+    --input: 240 6% 10%;
+    --ring: 22 93% 53%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar theme */
+    --sidebar-background: 240 6% 6%;
+    --sidebar-foreground: 240 5% 64.9%;
+    --sidebar-primary: 22 93% 53%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 6% 10%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 6% 20%;
+    --sidebar-ring: 22 93% 53%;
+
+    /* Custom design tokens */
+    --surface-elevated: 240 6% 8%;
+    --surface-hover: 240 6% 12%;
+    --orange-gradient: linear-gradient(135deg, hsl(22 93% 53%), hsl(22 93% 63%));
+    --dark-gradient: linear-gradient(135deg, hsl(240 6% 6%), hsl(240 6% 10%));
+    --shadow-glow: 0 0 30px hsl(22 93% 53% / 0.3);
+    --shadow-elevated: 0 8px 32px hsl(240 10% 3.9% / 0.5);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-inter antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  /* Card variants */
+  .card-elevated {
+    @apply bg-surface-elevated border-border/50 shadow-lg;
+  }
+
+  .card-hover {
+    @apply hover:bg-surface-hover transition-all duration-300;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-glow text-primary-foreground;
+    background: var(--orange-gradient);
+    box-shadow: var(--shadow-glow);
+    transition: var(--transition-smooth);
+  }
+
+  .btn-ghost {
+    @apply hover:bg-surface-hover hover:text-foreground;
+    transition: var(--transition-smooth);
+  }
+
+  /* Layout utilities */
+  .page-container {
+    @apply min-h-screen bg-background;
+  }
+
+  .content-area {
+    @apply flex-1 overflow-auto p-6;
+  }
+}
