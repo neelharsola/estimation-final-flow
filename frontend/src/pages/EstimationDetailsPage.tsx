@@ -9,12 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Calendar, ArrowLeft } from "lucide-react";
 
 export default function EstimationDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [estimation, setEstimation] = useState<any | null>(null);
@@ -22,6 +24,7 @@ export default function EstimationDetailsPage() {
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [editing, setEditing] = useState<{ row: number; field: string } | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -58,7 +61,8 @@ export default function EstimationDetailsPage() {
           clientName: full.client || "Unknown Client",
           description: full.description || "",
           status: full.status === "under_review" ? "pending_review" : full.status,
-          estimator: full.estimator_name || full.project?.estimator?.name || full.creator_id || "Unknown",
+          estimator: full.estimator_name || "Unknown",
+          estimatorId: full.creator_id || "",
           createdAt: new Date(full.created_at).toISOString().split('T')[0],
           envelope: full.envelope_data || null,
           currentVersion: full.current_version,
@@ -72,7 +76,13 @@ export default function EstimationDetailsPage() {
           description: mapped.description,
           status: mapped.status,
           estimator: mapped.estimator,
+          estimatorId: mapped.estimatorId,
         });
+        // Fetch users for estimator dropdown
+        try {
+          const allUsers = await api.users.list();
+          setUsers(allUsers || []);
+        } catch {}
       } catch (e: any) {
         setError(e?.message || "Failed to load estimation");
       } finally {
@@ -93,6 +103,7 @@ export default function EstimationDetailsPage() {
         client: form.clientName,
         description: form.description,
         status: form.status || "in_progress",
+        creator_id: form.estimatorId || estimation.estimatorId || undefined,
       };
       const updated = await api.estimations.update(id, updates);
       // Persist edited feature rows into envelope
@@ -105,6 +116,7 @@ export default function EstimationDetailsPage() {
             name: updates.title,
             client: updates.client,
             description: updates.description || existingEnvelope.project?.description || "",
+            estimator: { id: form.estimatorId || estimation.estimatorId || 0, name: form.estimator || estimation.estimator || "" },
           },
           rows: rows,
           ...(existingEnvelope.summary ? { summary: existingEnvelope.summary } : {}),
@@ -124,6 +136,8 @@ export default function EstimationDetailsPage() {
         clientName: updated.client,
         description: updated.description,
         status: updated.status,
+        estimatorId: updates.creator_id,
+        estimator: users.find(u => u.id === updates.creator_id)?.name || estimation.estimator,
       });
     } catch (e) {
       console.error(e);
@@ -218,7 +232,23 @@ export default function EstimationDetailsPage() {
             </div>
             <div>
               <label className="text-sm">Estimator</label>
-              <Input value={form.estimator} onChange={(e) => onChange("estimator", e.target.value)} />
+              {String(user?.role || "").toLowerCase() === "admin" ? (
+                <Select value={form.estimatorId || ""} onValueChange={(val) => {
+                  const selected = users.find(u => (u.id || u._id) === val);
+                  setForm((p: any) => ({ ...p, estimatorId: val, estimator: selected?.name || p.estimator }));
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={form.estimator || "Select estimator"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((u: any) => (
+                      <SelectItem key={u.id || u._id} value={(u.id || u._id)}>{u.name} ({u.role})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={form.estimator} readOnly />
+              )}
             </div>
             <div>
               <label className="text-sm">Created</label>
@@ -230,6 +260,36 @@ export default function EstimationDetailsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={async () => {
+          try {
+            const envelope = estimation.envelope || { schema_version: "1.0", project: {}, rows: [] };
+            const payload = {
+              schema_version: envelope.schema_version || "1.0",
+              project: {
+                ...(envelope.project || {}),
+                name: form.projectTitle,
+                client: form.clientName,
+                description: form.description || envelope.project?.description || "",
+                estimator: { id: form.estimatorId || 0, name: form.estimator || "" },
+              },
+              rows: rows,
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const file = new File([blob], `${form.projectTitle || "estimation"}.json`, { type: "application/json" });
+            const excelBlob = await api.tools.processEstimation(file);
+            const url = URL.createObjectURL(excelBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${form.projectTitle || "estimation"}_FILLED.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch (err) {
+            console.error("Excel generation failed", err);
+          }
+        }}>Download Excel</Button>
+      </div>
 
       <Card>
         <CardHeader>
@@ -327,63 +387,63 @@ export default function EstimationDetailsPage() {
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "num_components")}>{
                       isEditing(i, "num_components") ? (
-                        <Input autoFocus type="number" value={r.num_components ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, num_components: Number(e.target.value) } : row))} />
+                        <Input autoFocus type="number" className="w-24 text-right" value={r.num_components ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, num_components: Number(e.target.value) } : row))} />
                       ) : (
                         <span className="cursor-pointer">{r.num_components ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "ui_design")}>{
                       isEditing(i, "ui_design") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).ui_design ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_design: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).ui_design ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_design: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).ui_design ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "ui_module")}>{
                       isEditing(i, "ui_module") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).ui_module ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_module: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).ui_module ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_module: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).ui_module ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "backend_logic")}>{
                       isEditing(i, "backend_logic") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).backend_logic ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), backend_logic: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).backend_logic ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), backend_logic: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).backend_logic ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "general")}>{
                       isEditing(i, "general") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).general ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), general: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).general ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), general: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).general ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "service_api")}>{
                       isEditing(i, "service_api") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).service_api ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), service_api: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).service_api ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), service_api: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).service_api ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "db_structure")}>{
                       isEditing(i, "db_structure") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_structure ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_structure: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_structure ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_structure: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).db_structure ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "db_programming")}>{
                       isEditing(i, "db_programming") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_programming ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_programming: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_programming ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_programming: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).db_programming ?? 0}</span>
                       )
                     }</TableCell>
                     <TableCell onClick={() => startEdit(i, "db_udf")}>{
                       isEditing(i, "db_udf") ? (
-                        <Input autoFocus type="number" step="0.01" value={hoursOf(r).db_udf ?? 0} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_udf: Number(e.target.value) } } : row))} />
+                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_udf ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_udf: Number(e.target.value) } } : row))} />
                       ) : (
                         <span className="cursor-pointer">{hoursOf(r).db_udf ?? 0}</span>
                       )

@@ -88,8 +88,11 @@ async def update_basic(
     payload: dict,
     role: str = Depends(get_current_user_role_dep)
 ) -> Estimation:
-    if role not in ("estimator", "ops"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can update")
+    # Allow admin, estimator, ops to update; but only admin can change creator_id
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    if "creator_id" in payload and role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can change estimator")
     est = await update_estimation_title_client_desc(estimation_id, payload)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")

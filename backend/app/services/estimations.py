@@ -125,6 +125,9 @@ async def update_estimation_title_client_desc(estimation_id: str, payload: dict)
         updates["description"] = payload["description"]
     if "status" in payload:
         updates["status"] = payload["status"]
+    if "creator_id" in payload and payload["creator_id"]:
+        # store as string but keep original semantics
+        updates["creator_id"] = str(payload["creator_id"])
     result = await db.estimations.update_one({"_id": _oid(estimation_id)}, {"$set": updates})
     if result.matched_count == 0:
         return None
