@@ -1,5 +1,7 @@
 # Backend Index
 
+Moved: See `../agents-readme/backend.md` for consolidated backend documentation.
+
 ## Roles (canonical)
 - Admin
 - Estimator

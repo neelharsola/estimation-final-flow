@@ -71,7 +71,14 @@ async def list_users() -> List[User]:
     
     async for doc in db.users.find({}).sort("created_at", -1):
         doc["_id"] = str(doc["_id"])
-        users.append(User.model_validate(doc))
+        # Coerce unexpected roles to a safe default to avoid validation errors
+        role = doc.get("role")
+        if role not in ("Admin", "Estimator", "Ops"):
+            doc["role"] = "Estimator"
+        try:
+            users.append(User.model_validate(doc))
+        except Exception as e:
+            logger.error(f"Skipping user due to validation error: {e}")
     
     return users
 

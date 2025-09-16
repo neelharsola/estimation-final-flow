@@ -98,47 +98,65 @@ export default function EstimationDetailsPage() {
     if (!id) return;
     setSaving(true);
     try {
-      const updates: any = {
-        title: form.projectTitle,
-        client: form.clientName,
-        description: form.description,
-        status: form.status || "in_progress",
-        creator_id: form.estimatorId || estimation.estimatorId || undefined,
-      };
-      const updated = await api.estimations.update(id, updates);
-      // Persist edited feature rows into envelope
-      try {
-        const existingEnvelope = estimation.envelope || {};
+      // Build partial updates only for changed fields
+      const updates: any = {};
+      if (form.projectTitle !== estimation.projectTitle) updates.title = form.projectTitle;
+      if (form.clientName !== estimation.clientName) updates.client = form.clientName;
+      if (form.description !== estimation.description) updates.description = form.description;
+      if ((form.status || "in_progress") !== estimation.status) updates.status = form.status || "in_progress";
+      // Only admin can change creator_id; and only if changed
+      const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+      if (isAdmin && (form.estimatorId || "") !== (estimation.estimatorId || "")) {
+        updates.creator_id = form.estimatorId;
+      }
+
+      let updatedBasics: any = null;
+      if (Object.keys(updates).length > 0) {
+        updatedBasics = await api.estimations.update(id, updates);
+        setEstimation((prev: any) => ({
+          ...prev,
+          projectTitle: updatedBasics.title ?? prev.projectTitle,
+          clientName: updatedBasics.client ?? prev.clientName,
+          description: updatedBasics.description ?? prev.description,
+          status: updatedBasics.status ?? prev.status,
+          estimatorId: updates.creator_id ?? prev.estimatorId,
+          estimator: (() => {
+            if (!updates.creator_id) return prev.estimator;
+            const match = users.find(u => (u.id || u._id) === updates.creator_id);
+            return match?.name || prev.estimator;
+          })(),
+        }));
+      }
+
+      // Persist envelope only if rows or project fields affecting envelope changed
+      const existingEnvelope = estimation.envelope || {};
+      const prevRowsStr = JSON.stringify(existingEnvelope.rows || []);
+      const newRowsStr = JSON.stringify(rows || []);
+      const envelopeProjectChanged = (
+        (updates.title !== undefined) ||
+        (updates.client !== undefined) ||
+        (updates.description !== undefined) ||
+        (updates.creator_id !== undefined)
+      );
+      if (newRowsStr !== prevRowsStr || envelopeProjectChanged) {
         const updatedEnvelope = {
           schema_version: existingEnvelope.schema_version || "1.0",
           project: {
             ...(existingEnvelope.project || {}),
-            name: updates.title,
-            client: updates.client,
-            description: updates.description || existingEnvelope.project?.description || "",
-            estimator: { id: form.estimatorId || estimation.estimatorId || 0, name: form.estimator || estimation.estimator || "" },
+            name: (updates.title ?? estimation.projectTitle),
+            client: (updates.client ?? estimation.clientName),
+            description: (updates.description ?? existingEnvelope.project?.description ?? ""),
+            estimator: { id: (updates.creator_id ?? estimation.estimatorId ?? 0), name: (form.estimator || estimation.estimator || "") },
           },
           rows: rows,
           ...(existingEnvelope.summary ? { summary: existingEnvelope.summary } : {}),
         };
         const estAfterEnvelope = await api.estimations.updateEnvelope(id, updatedEnvelope);
-        // reflect rounding-safe mapping
         setEstimation((prev: any) => ({
           ...prev,
           envelope: estAfterEnvelope.envelope_data || updatedEnvelope,
         }));
-      } catch (e) {
-        console.error("Failed to update envelope", e);
       }
-      setEstimation({
-        ...estimation,
-        projectTitle: updated.title,
-        clientName: updated.client,
-        description: updated.description,
-        status: updated.status,
-        estimatorId: updates.creator_id,
-        estimator: users.find(u => u.id === updates.creator_id)?.name || estimation.estimator,
-      });
     } catch (e) {
       console.error(e);
     } finally {
