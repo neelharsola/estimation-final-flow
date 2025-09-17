@@ -89,7 +89,7 @@ export const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
       {/* Collapse button when closed */}
       {!isOpen && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
           <Button
             variant="ghost"
             size="sm"

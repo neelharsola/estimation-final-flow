@@ -18,9 +18,9 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   return (
     <div className="page-container flex">
       <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <Header onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="content-area">
+        <main className="content-area flex-1 overflow-y-auto animate-fade-in-up">
           {children}
         </main>
       </div>
