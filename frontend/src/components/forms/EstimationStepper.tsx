@@ -114,11 +114,11 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [estimationId, setEstimationId] = useState<string | null>(null);
+  const [finalized, setFinalized] = useState<boolean>(false);
   const [resources, setResources] = useState<Array<{ role: string; count: number; days: number }>>([]);
   const [allResources, setAllResources] = useState<any[]>([]);
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const [newResOpen, setNewResOpen] = useState(false);
-  const [newResName, setNewResName] = useState("");
   const [newResRole, setNewResRole] = useState("");
   const [newResRates, setNewResRates] = useState<{ AED?: number; INR?: number; USD?: number; POUND?: number }>({ AED: 0, INR: 0, USD: 0, POUND: 0 });
 
@@ -165,7 +165,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const jsonData = JSON.parse(e.target?.result as string);
         
@@ -196,8 +196,8 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           })),
         };
         setEstimationData(nextData);
-        // create estimation immediately
-        persistEnvelope(nextData);
+        // create estimation immediately and await id
+        try { await persistEnvelope(nextData); } catch {}
 
         sonnerToast.success("JSON uploaded successfully! Form has been populated.");
         
@@ -272,48 +272,46 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
 
       sonnerToast.success("Excel generated from latest envelope.");
       
-      // Notify parent component and close
-      if (onComplete) {
-        const estimation = {
-          id: `EST-${Date.now()}`,
-          projectTitle: estimationData.project.name,
-          clientName: estimationData.project.client,
-          status: "in_progress",
-          estimator: user?.name || "Unknown",
-          createdAt: new Date().toISOString().split('T')[0],
-          description: estimationData.project.description || `Estimation with ${estimationData.rows.length} features`
-        };
-        onComplete(estimation);
-      }
-      
-      // keep dialog open to continue to next steps
+      // keep dialog open to continue to next steps; do not emit completion until finalize
     } catch (error: any) {
       console.error("Processing error:", error);
       const message = error?.message || "Failed to process estimation. Please try again.";
       sonnerToast.error(message);
-      if (onComplete) {
-        const failed = {
-          id: `EST-${Date.now()}`,
-          projectTitle: estimationData.project.name,
-          clientName: estimationData.project.client,
-          status: "failed",
-          estimator: user?.name || "Unknown",
-          createdAt: new Date().toISOString().split('T')[0],
-          description: estimationData.project.description || `Estimation with ${estimationData.rows.length} features`
-        };
-        onComplete(failed);
-      }
+      // cleanup temporary draft on failure
+      try {
+        if (estimationId) {
+          await api.estimations.delete(estimationId);
+          setEstimationId(null);
+        }
+      } catch {}
+      // no dummy emission on failure
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const finalize = async () => {
+    if (finalized) return;
+    try {
+      const id = estimationId || await persistEnvelope(estimationData);
+      if (!id) throw new Error("Failed to create estimation");
+      // Save resources one more time before finalize if present
+      if (resources && resources.length > 0) {
+        await api.estimations.setResources(id, resources as any);
+      }
+      await api.estimations.finalize(id);
+      setFinalized(true);
+      sonnerToast.success("Estimation finalized");
+      if (onComplete) onComplete({ id, projectTitle: estimationData.project.name, clientName: estimationData.project.client });
+      onOpenChange(false);
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Failed to finalize estimation");
+    }
+  };
+
   const onUploadExcel = async (file: File) => {
     try {
-      if (!estimationId) {
-        await persistEnvelope(estimationData);
-      }
-      const id = estimationId as string;
+      const id = estimationId || await persistEnvelope(estimationData);
       const result = await api.estimations.uploadExcel(id, file);
       const { matched, updated, unmatched, rows, resources: parsedResources } = result || { matched: 0, updated: 0, unmatched: 0, rows: [], resources: [] };
       if (Array.isArray(rows) && rows.length > 0) {
@@ -724,35 +722,65 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   </DialogHeader>
                   <div className="space-y-3">
                     <div>
-                      <Label>Role</Label>
+                      <div className="mb-2"><Label className="text-lg">Role</Label></div>
                       <Input value={newResRole} onChange={(e) => setNewResRole(e.target.value)} />
                     </div>
+                    <br />
+                    <Label className="text-xl">Hourly Rates</Label>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label>AED</Label>
-                        <Input type="number" value={newResRates.AED ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, AED: Number(e.target.value) }))} />
+                        <Input type="number" value={newResRates.AED ?? 0} onChange={async (e) => {
+                          const aed = Number(e.target.value) || 0;
+                          // Fixed conversion rates based on provided table
+                          const USD = 0.2723 * aed;
+                          const INR = 23.98 * aed;
+                          const GBP = 0.20 * aed;
+                          setNewResRates({ AED: aed, USD: Number(USD.toFixed(2)), INR: Number(INR.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
+                        }} />
                       </div>
                       <div>
                         <Label>INR</Label>
-                        <Input type="number" value={newResRates.INR ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, INR: Number(e.target.value) }))} />
+                        <Input type="number" value={newResRates.INR ?? 0} onChange={async (e) => {
+                          const inr = Number(e.target.value) || 0;
+                          // Using fixed table: 1 INR = 0.0114 USD, 0.0416 AED, 0.0083 GBP
+                          const USD = 0.0114 * inr;
+                          const AED = 0.0416 * inr;
+                          const GBP = 0.0083 * inr;
+                          setNewResRates({ INR: inr, USD: Number(USD.toFixed(2)), AED: Number(AED.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
+                        }} />
                       </div>
                       <div>
                         <Label>USD</Label>
-                        <Input type="number" value={newResRates.USD ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, USD: Number(e.target.value) }))} />
+                        <Input type="number" value={newResRates.USD ?? 0} onChange={async (e) => {
+                          const usd = Number(e.target.value) || 0;
+                          // Using fixed table: 1 USD = 3.6725 AED, 87.78 INR, 0.73 GBP
+                          const AED = 3.6725 * usd;
+                          const INR = 87.78 * usd;
+                          const GBP = 0.73 * usd;
+                          setNewResRates({ USD: usd, AED: Number(AED.toFixed(2)), INR: Number(INR.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
+                        }} />
                       </div>
                       <div>
                         <Label>POUND</Label>
-                        <Input type="number" value={newResRates.POUND ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, POUND: Number(e.target.value) }))} />
+                        <Input type="number" value={newResRates.POUND ?? 0} onChange={async (e) => {
+                          const gbp = Number(e.target.value) || 0;
+                          // Using fixed table: 1 GBP = 5.01 AED, 119.75 INR, 1.3649 USD
+                          const AED = 5.01 * gbp;
+                          const INR = 119.75 * gbp;
+                          const USD = 1.3649 * gbp;
+                          setNewResRates({ POUND: gbp, AED: Number(AED.toFixed(2)), INR: Number(INR.toFixed(2)), USD: Number(USD.toFixed(2)) });
+                        }} />
                       </div>
                     </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setNewResOpen(false)}>Cancel</Button>
                     <Button onClick={async () => {
-                      if (!newResName || !newResRole) return;
-                      const created = await api.resources.create({ name: newResName, role: newResRole, rates: newResRates });
+                      if (!newResRole) return;
+                      const created = await api.resources.create({ name: newResRole, role: newResRole, rates: newResRates });
                       setAllResources(prev => [created, ...prev]);
-                      setNewResName(""); setNewResRole(""); setNewResRates({ AED: 0, INR: 0, USD: 0, POUND: 0 });
+                      setNewResRole(""); setNewResRates({ AED: 0, INR: 0, USD: 0, POUND: 0 });
                       setNewResOpen(false);
                     }}>Create</Button>
                   </DialogFooter>
@@ -866,12 +894,28 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   };
 
   return (
-    <UIDialog open={open} onOpenChange={onOpenChange}>
+    <UIDialog open={open} onOpenChange={async (v) => {
+      if (!v) {
+        // Dialog closing; delete temp draft if not finalized
+        try {
+          if (estimationId && !finalized) {
+            await api.estimations.delete(estimationId);
+            setEstimationId(null);
+          }
+        } catch {}
+      }
+      onOpenChange(v);
+    }}>
       <UIDialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-primary" />
             Create New Estimation
+            {estimationId ? (
+              <span className="ml-2">
+                <Badge variant={finalized ? "default" : "secondary"}>{finalized ? "Finalized" : "Draft (not saved)"}</Badge>
+              </span>
+            ) : null}
           </DialogTitle>
           <DialogDescription>
             Upload a JSON file or follow the steps to create a comprehensive project estimation
@@ -927,7 +971,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                 Next
                 <ChevronRight className="w-4 h-4" />
               </Button>
-            ) : null}
+            ) : (
+              <Button onClick={finalize} className="gap-2" disabled={finalized}>
+                <CheckCircle className="w-4 h-4" />
+                {finalized ? "Finalized" : "Finalize Estimation"}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -956,7 +1005,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                 Next
                 <ChevronRight className="w-4 h-4" />
               </Button>
-            ) : null}
+            ) : (
+              <Button onClick={finalize} className="gap-2" disabled={finalized}>
+                <CheckCircle className="w-4 h-4" />
+                {finalized ? "Finalized" : "Finalize Estimation"}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </UIDialogContent>

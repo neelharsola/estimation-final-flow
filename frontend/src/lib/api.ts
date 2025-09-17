@@ -70,6 +70,7 @@ export const api = {
     delete: (id: string) => request(`/estimations/${id}`, { method: "DELETE" }),
     updateEnvelope: (id: string, envelope: any) => request(`/estimations/${id}/envelope`, { method: "PUT", body: JSON.stringify(envelope) }),
     importEnvelope: (envelope: any) => request(`/estimations/import-envelope`, { method: "POST", body: JSON.stringify(envelope) }),
+    finalize: (id: string) => request(`/estimations/${id}/finalize`, { method: "POST" }),
     generateExcel: async (id: string) => {
       const token = localStorage.getItem("access_token");
       const res = await fetch(`${API_URL}/estimations/${id}/export-excel`, {
@@ -125,6 +126,12 @@ export const api = {
       delete: (rateId: string) => request(`/pricing/rates/${rateId}`, { method: "DELETE" }),
     },
     calc: (estimationId: string) => request("/pricing/calc", { method: "POST", body: JSON.stringify({ estimation_id: estimationId }) }),
+    fx: (base: string, symbols: string) => request(`/pricing/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(symbols)}`),
+    projects: {
+      list: () => request("/pricing/projects"),
+      resources: (estimationId: string) => request(`/pricing/projects/${estimationId}/resources`),
+      updateResources: (estimationId: string, rows: any[]) => request(`/pricing/projects/${estimationId}/resources`, { method: "PUT", body: JSON.stringify(rows) }),
+    },
   },
   tools: {
     processEstimation: async (jsonFile: File) => {

@@ -12,6 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Plus, 
   Edit, 
@@ -23,76 +30,89 @@ import {
   History
 } from "lucide-react";
 
-interface PricingRate {
-  role: string;
-  region: string;
-  dailyRate: number;
-  currency: string;
-  lastUpdated: string;
-  updatedBy: string;
+interface ProjectItem {
+  id: string;
+  title: string;
+  client: string;
+  created_at: string;
+  updated_at: string;
 }
 
-// Load pricing data from backend
-
-const roles: string[] = [];
-const regions: string[] = [];
+interface ProjectResourceRow {
+  role: string;
+  day_rate: number;
+  currency: string;
+  region: string;
+}
 
 export default function Pricing() {
-  const [editingCell, setEditingCell] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [data, setData] = useState<PricingRate[]>([]);
-  const [rolesList, setRolesList] = useState<string[]>([]);
-  const [regionsList, setRegionsList] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [resources, setResources] = useState<ProjectResourceRow[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<Record<string, { rate?: string; currency?: string }>>({});
 
   useEffect(() => {
     (async () => {
       try {
         const { api } = await import("@/lib/api");
-        const items = await api.pricing.rates.list();
-        const mapped: PricingRate[] = items.map((r: any) => ({
-          role: r.role,
-          region: r.region,
-          dailyRate: r.day_rate,
-          currency: r.currency,
-          lastUpdated: r.effective_from?.split('T')[0] || "",
-          updatedBy: "—",
+        const items = await api.pricing.projects.list();
+        const mapped = (items || []).map((p: any) => ({
+          id: p.id || p._id,
+          title: p.title,
+          client: p.client,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
         }));
-        setData(mapped);
-        setRolesList([...new Set(mapped.map(i => i.role))]);
-        setRegionsList([...new Set(mapped.map(i => i.region))]);
+        setProjects(mapped);
       } catch {}
     })();
   }, []);
   const [isNewRoleOpen, setIsNewRoleOpen] = useState(false);
 
-  const handleNewRole = (newRole: any) => {
-    // Add logic to handle new role creation
-    console.log("New role created:", newRole);
+  const selectProject = async (id: string) => {
+    setSelectedId(id);
+    try {
+      const { api } = await import("@/lib/api");
+      const rows = await api.pricing.projects.resources(id);
+      const mapped: ProjectResourceRow[] = (rows || []).map((r: any) => ({
+        role: r.role,
+        day_rate: r.day_rate,
+        currency: r.currency || "USD",
+        region: r.region || "default",
+      }));
+      setResources(mapped);
+      setEditing({});
+    } catch {}
   };
 
-  const handleEdit = (role: string, region: string) => {
-    const cellKey = `${role}-${region}`;
-    const currentRate = data.find(item => item.role === role && item.region === region)?.dailyRate;
-    setEditingCell(cellKey);
-    setEditValue(currentRate?.toString() || "");
+  const handleEdit = (role: string, field: "day_rate" | "currency", value: string) => {
+    setEditing(prev => ({ ...prev, [role]: { ...prev[role], [field === "day_rate" ? "rate" : "currency"]: value } }));
   };
 
-  const handleSave = (role: string, region: string) => {
-    const newRate = parseFloat(editValue);
-    if (!isNaN(newRate)) {
-      setData(prev => prev.map(item => 
-        item.role === role && item.region === region 
-          ? { ...item, dailyRate: newRate, lastUpdated: new Date().toISOString().split('T')[0], updatedBy: "Current User" }
-          : item
-      ));
-    }
-    setEditingCell(null);
-    setEditValue("");
-  };
-
-  const handleCancel = () => {
-    setEditingCell(null);
-    setEditValue("");
+  const saveChanges = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      const { api } = await import("@/lib/api");
+      const payload = resources.map(r => ({
+        role: r.role,
+        day_rate: Number(editing[r.role]?.rate ?? r.day_rate),
+        currency: editing[r.role]?.currency ?? r.currency,
+        region: r.region,
+      }));
+      const updated = await api.pricing.projects.updateResources(selectedId, payload);
+      const mapped: ProjectResourceRow[] = (updated || []).map((r: any) => ({
+        role: r.role,
+        day_rate: r.day_rate,
+        currency: r.currency,
+        region: r.region,
+      }));
+      setResources(mapped);
+      setEditing({});
+    } catch {}
+    setSaving(false);
   };
 
   const getRegionFlag = (region: string) => {
@@ -128,142 +148,96 @@ export default function Pricing() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="card-elevated">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{rolesList.length}</p>
-                <p className="text-sm text-muted-foreground">Active Roles</p>
-              </div>
+      {/* Projects -> Resources editor */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="card-elevated md:col-span-1">
+          <CardHeader>
+            <CardTitle>Projects</CardTitle>
+            <CardDescription>Select a project to configure resource pricing</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3">
+              <Input placeholder="Search projects..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <div className="space-y-2 max-h-[480px] overflow-auto">
+              {projects
+                .filter(p => p.title.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()))
+                .map((p) => (
+                  <button key={p.id} onClick={() => selectProject(p.id)} className={`w-full text-left p-3 rounded border ${selectedId === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-surface-hover"}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{p.title}</div>
+                        <div className="text-xs text-muted-foreground">{p.client}</div>
+                      </div>
+                      <Badge variant="outline">{new Date(p.updated_at).toISOString().split('T')[0]}</Badge>
+                    </div>
+                  </button>
+              ))}
+              {projects.length === 0 && (
+                <div className="text-sm text-muted-foreground">No projects found.</div>
+              )}
             </div>
           </CardContent>
         </Card>
-        <Card className="card-elevated">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                <Globe className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{regionsList.length}</p>
-                <p className="text-sm text-muted-foreground">Regions</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-elevated">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">$350</p>
-                <p className="text-sm text-muted-foreground">Avg Daily Rate</p>
-              </div>
-            </div>
+
+        <Card className="card-elevated md:col-span-2">
+          <CardHeader>
+            <CardTitle>Project Resources</CardTitle>
+            <CardDescription>Edit day rates and currencies, then Save</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!selectedId ? (
+              <div className="text-sm text-muted-foreground">Select a project to view resources.</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Day Rate</TableHead>
+                        <TableHead>Currency</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {resources.map((r) => (
+                        <TableRow key={r.role}>
+                          <TableCell className="font-medium">{r.role}</TableCell>
+                          <TableCell>
+                            <Input type="number" className="w-32" defaultValue={r.day_rate} onChange={(e) => handleEdit(r.role, "day_rate", e.target.value)} />
+                          </TableCell>
+                          <TableCell>
+                            <Select defaultValue={r.currency} onValueChange={(v) => handleEdit(r.role, "currency", v)}>
+                              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="USD">USD</SelectItem>
+                                <SelectItem value="INR">INR</SelectItem>
+                                <SelectItem value="AED">AED</SelectItem>
+                                <SelectItem value="GBP">GBP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {resources.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-sm text-muted-foreground">No resources found for this project.</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => selectProject(selectedId!)} disabled={saving}>Reload</Button>
+                  <Button onClick={saveChanges} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? "Saving..." : "Save Changes"}</Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Pricing Matrix */}
-      <Card className="card-elevated">
-        <CardHeader>
-          <CardTitle>Daily Rate Matrix</CardTitle>
-          <CardDescription>
-            Click on any rate to edit. All rates are in USD.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Role</TableHead>
-                  {regions.map((region) => (
-                    <TableHead key={region} className="text-center min-w-[120px]">
-                      <div className="flex items-center justify-center gap-2">
-                        <span>{getRegionFlag(region)}</span>
-                        <span>{region}</span>
-                      </div>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rolesList.map((role) => (
-                  <TableRow key={role} className="hover:bg-surface-hover">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <Users className="w-4 h-4 text-primary" />
-                        </div>
-                        {role}
-                      </div>
-                    </TableCell>
-                    {regionsList.map((region) => {
-                      const cellKey = `${role}-${region}`;
-                      const rateData = data.find(item => item.role === role && item.region === region);
-                      const isEditing = editingCell === cellKey;
-                      
-                      return (
-                        <TableCell key={region} className="text-center">
-                          {isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                className="w-20 h-8 text-center"
-                                autoFocus
-                              />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleSave(role, region)}
-                                className="w-6 h-6 p-0"
-                              >
-                                <Save className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={handleCancel}
-                                className="w-6 h-6 p-0"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div 
-                              className="cursor-pointer hover:bg-surface-hover rounded px-2 py-1 group"
-                              onClick={() => handleEdit(role, region)}
-                            >
-                              <div className="flex items-center justify-center gap-1">
-                                <DollarSign className="w-3 h-3 text-green-500" />
-                                <span className="font-medium">{rateData?.dailyRate}</span>
-                                <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {rateData?.lastUpdated}
-                              </div>
-                            </div>
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Recent Updates (placeholder) */}
 
       {/* Recent Updates */}
       <Card className="card-elevated">

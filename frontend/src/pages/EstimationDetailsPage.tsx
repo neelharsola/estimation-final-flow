@@ -167,12 +167,16 @@ export default function EstimationDetailsPage() {
   };
 
   const onDelete = async () => {
-    if (!id) return;
+    if (!id || id === "None") {
+      toast.error("Invalid estimation id");
+      return;
+    }
     try {
       await api.estimations.delete(id);
       navigate(-1);
     } catch (e) {
       console.error(e);
+      toast.error("Failed to delete estimation");
     }
   };
 

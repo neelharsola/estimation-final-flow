@@ -143,7 +143,17 @@ async def import_envelope(payload: dict, user_id: str = Depends(get_current_user
     from app.services.importer import build_estimation_from_envelope
     est = build_estimation_from_envelope(payload, creator_id=user_id)
     created = await create_estimation(est)
-    return {"estimation_id": created.id}
+    # Ensure id is present for the response
+    return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
+
+
+@router.post("/{estimation_id}/finalize")
+async def finalize_estimation(estimation_id: str, user_id: str = Depends(get_current_user_id)) -> dict:
+    """Mark a temporary estimation as finalized so it becomes visible in listings."""
+    db = get_db()
+    from bson import ObjectId
+    await db.estimations.update_one({"_id": ObjectId(estimation_id)}, {"$set": {"is_temporary": False}})
+    return {"ok": True}
 
 
 @router.get("/{estimation_id}/export-excel")

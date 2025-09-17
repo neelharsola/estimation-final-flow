@@ -120,6 +120,7 @@ class Estimation(BaseModel):
     description: Optional[str] = None
     status: Literal["draft", "under_review", "ready_for_pricing"]
     creator_id: str
+    is_temporary: bool = False
     current_version: EstimationVersion
     versions: List[EstimationVersion]
     review_records: List[ReviewRecord]

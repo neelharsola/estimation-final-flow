@@ -5,10 +5,13 @@ from typing import List
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from functools import lru_cache
+from datetime import timedelta
 
 from app.core.security import get_current_user_id
 from app.db.mongo import get_db
-from app.models.pricing import PricingCalcRequest, PricingCalcResponse, PricingRate
+from app.models.pricing import PricingCalcRequest, PricingCalcResponse, PricingRate, ProjectSummary, ProjectResourcePricing
 from app.services.pricing import calculate_pricing
 
 
@@ -75,4 +78,83 @@ async def calc(req: PricingCalcRequest) -> PricingCalcResponse:
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+
+@lru_cache(maxsize=8)
+def _fx_cache_key(base: str, symbols: str) -> str:
+    return f"{base}:{symbols}"
+
+
+@router.get("/fx")
+async def get_fx(base: str = "USD", symbols: str = "AED,INR,GBP") -> dict:
+    """Return fixed FX rates for smooth offline calculation.
+
+    Fixed matrix (approx):
+    - 1 USD = {"AED": 3.6725, "INR": 87.78, "GBP": 0.73}
+    - 1 INR = {"USD": 0.0114, "AED": 0.0416, "GBP": 0.0083}
+    - 1 GBP = {"USD": 1.3649, "INR": 119.75, "AED": 5.01}
+    - 1 AED = {"USD": 0.2723, "INR": 23.98, "GBP": 0.20}
+    """
+    fixed = {
+        "USD": {"USD": 1.0, "INR": 87.78, "GBP": 0.73, "AED": 3.6725},
+        "INR": {"USD": 0.0114, "INR": 1.0, "GBP": 0.0083, "AED": 0.0416},
+        "GBP": {"USD": 1.3649, "INR": 119.75, "GBP": 1.0, "AED": 5.01},
+        "AED": {"USD": 0.2723, "INR": 23.98, "GBP": 0.20, "AED": 1.0},
+    }
+    base = base.upper()
+    symbols_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    rates = {}
+    for s in symbols_list:
+        rates[s] = fixed.get(base, {}).get(s)
+    return {"base": base, "date": None, "rates": rates}
+
+
+# New: Pricing Projects overview
+@router.get("/projects", response_model=List[ProjectSummary])
+async def list_pricing_projects(role: str = Depends(get_current_user_role_dep)) -> List[ProjectSummary]:
+    db = get_db()
+    items: list[ProjectSummary] = []
+    async for doc in db.estimations.find({"$or": [{"is_temporary": {"$exists": False}}, {"is_temporary": False}]}).sort("updated_at", -1):
+        doc["_id"] = str(doc["_id"])  # serialize
+        items.append(ProjectSummary.model_validate(doc))
+    return items
+
+
+@router.get("/projects/{estimation_id}/resources", response_model=List[ProjectResourcePricing])
+async def get_project_resources(estimation_id: str, role: str = Depends(get_current_user_role_dep)) -> List[ProjectResourcePricing]:
+    from bson import ObjectId
+    db = get_db()
+    est = await db.estimations.find_one({"_id": ObjectId(estimation_id)})
+    if not est:
+        raise HTTPException(status_code=404, detail="Estimation not found")
+    out: list[ProjectResourcePricing] = []
+    for res in (est.get("current_version", {}).get("resources") or []):
+        # Fetch latest rate for role
+        rate_doc = await db.pricing_rates.find_one({"role": res.get("role"), "region": "default"}, sort=[("version", -1)])
+        day_rate = float(rate_doc.get("day_rate", 0)) if rate_doc else 0.0
+        currency = rate_doc.get("currency", "USD") if rate_doc else "USD"
+        out.append(ProjectResourcePricing(role=res.get("role", ""), day_rate=day_rate, currency=currency, region=rate_doc.get("region", "default") if rate_doc else "default"))
+    return out
+
+
+@router.put("/projects/{estimation_id}/resources", response_model=List[ProjectResourcePricing])
+async def update_project_resources(estimation_id: str, updates: List[ProjectResourcePricing], role: str = Depends(get_current_user_role_dep)) -> List[ProjectResourcePricing]:
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    from bson import ObjectId
+    db = get_db()
+    # Upsert pricing rates versioned per role for region="default"
+    # Simple approach: create a new version with +1 for each role being updated
+    for item in updates:
+        last = await db.pricing_rates.find_one({"role": item.role, "region": item.region}, sort=[("version", -1)])
+        next_version = int(last.get("version", 0)) + 1 if last else 1
+        await db.pricing_rates.insert_one({
+            "role": item.role,
+            "region": item.region or "default",
+            "day_rate": float(item.day_rate),
+            "currency": item.currency or "USD",
+            "version": next_version,
+            "effective_from": datetime.utcnow(),
+        })
+    # Return current effective rates after update
+    return await get_project_resources(estimation_id)
 

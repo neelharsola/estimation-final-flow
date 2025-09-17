@@ -11,8 +11,14 @@ from app.models.estimation import Estimation, EstimationVersion, Feature, Resour
 from app.services.excel import ExcelService
 
 
-def _oid(id_str: str) -> ObjectId:
-    return ObjectId(id_str)
+def _oid(id_str: str) -> ObjectId | None:
+    """Safely parse a Mongo ObjectId. Returns None if invalid/empty."""
+    try:
+        if not id_str:
+            return None
+        return ObjectId(id_str)
+    except Exception:
+        return None
 
 
 async def create_estimation(est: Estimation) -> Estimation:
@@ -89,6 +95,8 @@ async def list_estimations(created_by: str | None = None) -> List[Estimation]:
     query: dict = {}
     if created_by:
         query["creator_id"] = created_by
+    # Exclude temporary drafts from general listing
+    query["$or"] = [{"is_temporary": {"$exists": False}}, {"is_temporary": False}]
     async for doc in db.estimations.find(query).sort("updated_at", -1):
         doc["_id"] = str(doc["_id"])  # serialize
         doc["id"] = doc["_id"]
@@ -106,8 +114,11 @@ async def list_estimations(created_by: str | None = None) -> List[Estimation]:
 async def update_envelope_data(estimation_id: str, envelope: dict) -> Optional[Estimation]:
     db = get_db()
     now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
     result = await db.estimations.update_one(
-        {"_id": _oid(estimation_id)},
+        {"_id": oid},
         {"$set": {"envelope_data": envelope, "updated_at": now}},
     )
     if result.matched_count == 0:
@@ -133,7 +144,10 @@ async def update_estimation_title_client_desc(estimation_id: str, payload: dict)
     if "creator_id" in payload and payload["creator_id"]:
         # store as string but keep original semantics
         updates["creator_id"] = str(payload["creator_id"])
-    result = await db.estimations.update_one({"_id": _oid(estimation_id)}, {"$set": updates})
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
+    result = await db.estimations.update_one({"_id": oid}, {"$set": updates})
     if result.matched_count == 0:
         return None
     return await get_estimation(estimation_id)
@@ -141,15 +155,21 @@ async def update_estimation_title_client_desc(estimation_id: str, payload: dict)
 
 async def delete_estimation(estimation_id: str) -> bool:
     db = get_db()
-    res = await db.estimations.delete_one({"_id": _oid(estimation_id)})
+    oid = _oid(estimation_id)
+    if oid is None:
+        return False
+    res = await db.estimations.delete_one({"_id": oid})
     return res.deleted_count > 0
 
 
 async def update_features(estimation_id: str, features: list[Feature]) -> Optional[Estimation]:
     db = get_db()
     now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
     result = await db.estimations.update_one(
-        {"_id": _oid(estimation_id)},
+        {"_id": oid},
         {"$set": {"current_version.features": [f.model_dump() for f in features], "updated_at": now}},
     )
     if result.matched_count == 0:
@@ -160,8 +180,11 @@ async def update_features(estimation_id: str, features: list[Feature]) -> Option
 async def update_resources(estimation_id: str, resources: list[ResourceAllocation]) -> Optional[Estimation]:
     db = get_db()
     now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
     result = await db.estimations.update_one(
-        {"_id": _oid(estimation_id)},
+        {"_id": oid},
         {"$set": {"current_version.resources": [r.model_dump() for r in resources], "updated_at": now}},
     )
     if result.matched_count == 0:
@@ -172,8 +195,11 @@ async def update_resources(estimation_id: str, resources: list[ResourceAllocatio
 async def add_review(estimation_id: str, review: ReviewRecord) -> Optional[Estimation]:
     db = get_db()
     now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
     result = await db.estimations.update_one(
-        {"_id": _oid(estimation_id)},
+        {"_id": oid},
         {"$push": {"review_records": review.model_dump()}, "$set": {"updated_at": now}},
     )
     if result.matched_count == 0:
@@ -202,8 +228,11 @@ async def snapshot_version(estimation_id: str, user_id: str, notes: str | None =
         notes=notes,
     )
     db = get_db()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
     await db.estimations.update_one(
-        {"_id": _oid(estimation_id)},
+        {"_id": oid},
         {"$push": {"versions": new_version.model_dump()}, "$set": {"current_version": new_version.model_dump(), "updated_at": datetime.utcnow()}},
     )
     return await get_estimation(estimation_id)

@@ -206,6 +206,7 @@ def build_estimation_from_envelope(envelope: Dict[str, Any], creator_id: str) ->
         description=None,
         status="draft",
         creator_id=creator_id,
+        is_temporary=True,
         current_version=current_version,
         versions=[],
         review_records=[],

@@ -35,3 +35,18 @@ class PricingCalcResponse(BaseModel):
     currency: str
 
 
+class ProjectSummary(BaseModel):
+    id: str = Field(serialization_alias="_id")
+    title: str
+    client: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectResourcePricing(BaseModel):
+    role: str
+    day_rate: float
+    currency: str = "USD"
+    region: str = "default"
+
+

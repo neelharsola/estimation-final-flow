@@ -73,7 +73,12 @@ export default function EstimationsPage() {
   const loadEstimations = async () => {
     try {
       const data = await api.estimations.list();
-      const mapped = data.map((e: any) => {
+      const mapped = data
+        .filter((e: any) => {
+          const rawId = (e?.id ?? e?._id ?? e?._id?.$oid ?? e?._id?.["$oid"]) as string | undefined;
+          return Boolean(rawId);
+        })
+        .map((e: any) => {
         const rawId = (e?.id ?? e?._id ?? e?._id?.$oid ?? e?._id?.["$oid"]) as string | undefined;
         return {
           id: rawId,
@@ -282,7 +287,7 @@ export default function EstimationsPage() {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem className="text-red-600" onClick={async () => {
-                            if (!estimation.id) {
+                            if (!estimation.id || estimation.id === "None") {
                               sonnerToast.error("Missing estimation id");
                               return;
                             }
