@@ -8,6 +8,7 @@ from app.models.estimation import (
     EstimationRow, ProjectInfo, EstimationSummary, Estimator,
     Hours, PreviousProjectActual, SourceRef
 )
+import hashlib
 
 
 def _safe_str(value: Any) -> str:
@@ -50,6 +51,17 @@ def _row_to_feature(row: Dict[str, Any]) -> Feature:
     return Feature(title=title, hours=hours_total, complexity=complexity, priority=None)
 
 
+def _compute_row_id(row_data: Dict[str, Any]) -> str:
+    key_parts = [
+        str(row_data.get("platform", "")),
+        str(row_data.get("module", "")),
+        str(row_data.get("component", "")),
+        str(row_data.get("feature", "")),
+    ]
+    raw = "|".join(p.strip().lower() for p in key_parts)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()  # stable deterministic id
+
+
 def _parse_estimation_row(row_data: Dict[str, Any]) -> EstimationRow:
     """Parse a single row from the JSON envelope into EstimationRow model"""
     
@@ -85,6 +97,7 @@ def _parse_estimation_row(row_data: Dict[str, Any]) -> EstimationRow:
         ))
     
     return EstimationRow(
+        row_id=row_data.get("row_id") or _compute_row_id(row_data),
         platform=_safe_str(row_data.get("platform")),
         module=_safe_str(row_data.get("module")),
         component=_safe_str(row_data.get("component")),

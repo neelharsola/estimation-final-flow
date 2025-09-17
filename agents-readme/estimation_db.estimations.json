@@ -1,0 +1,1255 @@
+[{
+  "_id": {
+    "$oid": "68c934086cb8ee48e3478837"
+  },
+  "title": "MIS Consulting AI-Driven Educational Platform",
+  "client": "MIS Consulting AI-Driven Educational Platform",
+  "description": "",
+  "status": "draft",
+  "creator_id": "68c26a7f6459e55f23ab1811",
+  "current_version": {
+    "version_number": 1,
+    "features": [
+      {
+        "title": "Conversational Interface - Chat UI - Chat-first interface with multi-turn, attachments, language toggle in header",
+        "hours": 105.8,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Conversational Interface - Use Case Selector - Dropdown/icon-based module selection and routing",
+        "hours": 13.8,
+        "complexity": "Simple",
+        "priority": null
+      },
+      {
+        "title": "Prompting & Actions - Prompt Suggestions - Contextual suggestions buttons & recent query memory",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Prompting & Actions - Voice Input - Voice-to-text microphone capture and offline STT",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Prompting & Actions - Text-to-Speech - 'Listen to Report' playback across modules (English only Phase 1)",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "File Handling - Upload Panel - Upload PDFs/DOCX/CSV/images with validation and progress",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Knowledge Sync - Ingestion Service - Parse, OCR, chunk, embed, tag; update FAISS + Postgres metadata",
+        "hours": 69,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Knowledge Sync - Offline Sync - File-based local/intranet sync with deferred queues",
+        "hours": 34.5,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Authentication - Sign In - Username/password sign-in with language preference in profile",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Authentication - Password Reset - Admin-triggered or email-based reset with token (LAN)",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Authentication - Session Management - Secure session handling with idle timeouts and CSRF",
+        "hours": 4.6,
+        "complexity": "Simple",
+        "priority": null
+      },
+      {
+        "title": "User Management - RBAC - School-based RBAC with role-specific module access",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "User Management - Access Management - Admin UI to create/delete users, assign/revoke roles, default permissions",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Inspection Flow - Start New Inspection - Initiate session with framework + metadata + optional SIS fetch",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Inspection Flow - Upload Evidence - Upload, validate, extract, tag, link to sections",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Report Generation - Generate Report - Canvas view with sectioned report per framework; inline edit; narration",
+        "hours": 105.8,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Output Management - Reports Library - Search & filter prior reports; RBAC-based open read-only/edit",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Content & Planning - Lesson Plan Generator - AI-assisted lesson plan generation aligned to curriculum with editing & export",
+        "hours": 105.8,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Student Assistant - Assistant Core - Scoped conversational assistant with RAG to teacher-approved materials",
+        "hours": 105.8,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Admissions - Process Assistant - Conversational support for intake, status queries, eligibility, scheduling",
+        "hours": 52.9,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Marketing - Campaign Generator - Generate image+caption with canvas editor via Fabric.js; brand kit enforcement",
+        "hours": 105.8,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "AI Orchestration - Router - Route to 4 LLMs, fallback handling, model chaining with lineage metadata",
+        "hours": 69,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "AI Orchestration - Retrieval - Shared retrieval with FAISS + reranker; session-scoped indexes",
+        "hours": 69,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "Communication & Security - API Gateway - JWT auth, RBAC enforcement, mTLS between services on LAN subnet",
+        "hours": 34.5,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Output Management - PDF Service - Server-side PDF rendering with templates and annex support",
+        "hours": 34.5,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Database - Schema Design - PostgreSQL schema for users, roles, sessions, uploads, KB, logs, reports",
+        "hours": 69,
+        "complexity": "Complex",
+        "priority": null
+      },
+      {
+        "title": "DevOps - Env & CI/CD - Appliance env setup, container orchestration, secrets, monitoring hooks",
+        "hours": 40,
+        "complexity": "Average",
+        "priority": null
+      },
+      {
+        "title": "Logging & History - Audit Trail - Event logs for prompts, uploads, model use, downloads",
+        "hours": 34.5,
+        "complexity": "Average",
+        "priority": null
+      }
+    ],
+    "resources": [],
+    "created_by": "68c26a7f6459e55f23ab1811",
+    "created_at": {
+      "$date": "2025-09-16T09:55:20.885Z"
+    },
+    "notes": null
+  },
+  "versions": [],
+  "review_records": [],
+  "created_at": {
+    "$date": "2025-09-16T09:55:20.885Z"
+  },
+  "updated_at": {
+    "$date": "2025-09-16T12:38:31.875Z"
+  },
+  "envelope_data": {
+    "schema_version": "1.0",
+    "project": {
+      "name": "MIS Consulting AI-Driven Educational Platform",
+      "estimator": {
+        "name": "System Admin",
+        "id": 1
+      },
+      "hours_per_day": 8,
+      "working_days_per_month": 18,
+      "contingency_pct": 0.1
+    },
+    "rows": [
+      {
+        "platform": "Web",
+        "module": "Conversational Interface",
+        "component": "Chat UI",
+        "feature": "Chat-first interface with multi-turn, attachments, language toggle in header",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 12,
+          "ui_module": 20,
+          "backend_logic": 20,
+          "general": 13.8,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 6,
+        "source_refs": [],
+        "assumptions": [
+          "Next.js + Tailwind per System Requirements UI; streaming via SSE/WebSocket.",
+          "Arabic RTL via Tailwind RTL toggle."
+        ],
+        "risks": [
+          "Latency on low-tier hardware."
+        ],
+        "dependencies": [
+          "UI framework setup"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Conversational Interface",
+        "component": "Use Case Selector",
+        "feature": "Dropdown/icon-based module selection and routing",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Simple",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 3,
+          "ui_module": 5,
+          "backend_logic": 4,
+          "general": 1.8,
+          "service_api": 0,
+          "db_structure": 0,
+          "db_programming": 0,
+          "db_udf": 0
+        },
+        "num_components": 2,
+        "source_refs": [],
+        "assumptions": [
+          "Selector sets active module scope on session metadata."
+        ],
+        "risks": [],
+        "dependencies": [],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Prompting & Actions",
+        "component": "Prompt Suggestions",
+        "feature": "Contextual suggestions buttons & recent query memory",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "Store recent prompts per user; surface per active module."
+        ],
+        "risks": [
+          "Suggestion irrelevance."
+        ],
+        "dependencies": [],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Prompting & Actions",
+        "component": "Voice Input",
+        "feature": "Voice-to-text microphone capture and offline STT",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "Vosk/whisper.cpp (offline)",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "English-only STT (Phase 1) per SRS.",
+          "On-device model packaged with appliance."
+        ],
+        "risks": [
+          "Accuracy in noisy classrooms."
+        ],
+        "dependencies": [
+          "Audio capture permissions"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Prompting & Actions",
+        "component": "Text-to-Speech",
+        "feature": "'Listen to Report' playback across modules (English only Phase 1)",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "Coqui TTS/pyttsx3 (offline)",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "English-only voice in Phase 1 as specified."
+        ],
+        "risks": [
+          "Voice quality on low-end hardware."
+        ],
+        "dependencies": [],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "File Handling",
+        "component": "Upload Panel",
+        "feature": "Upload PDFs/DOCX/CSV/images with validation and progress",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 4,
+        "source_refs": [],
+        "assumptions": [
+          "Chunked uploads; enforce per-file limits."
+        ],
+        "risks": [
+          "Large files may impact UI responsiveness."
+        ],
+        "dependencies": [
+          "Document Processing Pipeline"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "AI/ML",
+        "module": "Knowledge Sync",
+        "component": "Ingestion Service",
+        "feature": "Parse, OCR, chunk, embed, tag; update FAISS + Postgres metadata",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "PyMuPDF, python-docx, bge-m3, FAISS, LangChain",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 20,
+          "general": 9,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Background workers with retry; fully offline."
+        ],
+        "risks": [
+          "GPU scarcity may delay embeddings."
+        ],
+        "dependencies": [
+          "PostgreSQL",
+          "FAISS"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "DevOps",
+        "module": "Knowledge Sync",
+        "component": "Offline Sync",
+        "feature": "File-based local/intranet sync with deferred queues",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 10,
+          "general": 4.5,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Manual admin-triggered sync allowed."
+        ],
+        "risks": [
+          "File corruption during transfer."
+        ],
+        "dependencies": [
+          "Shared storage path"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Authentication",
+        "component": "Sign In",
+        "feature": "Username/password sign-in with language preference in profile",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "Local auth, strong hashing, no external IdP.",
+          "Admin-provisioned accounts only."
+        ],
+        "risks": [
+          "Brute-force attempts; lockout policy required."
+        ],
+        "dependencies": [
+          "User DB"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Authentication",
+        "component": "Password Reset",
+        "feature": "Admin-triggered or email-based reset with token (LAN)",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 2,
+        "source_refs": [],
+        "assumptions": [
+          "SMTP available on LAN; fallback to admin-only reset flow."
+        ],
+        "risks": [
+          "Email delivery reliability in offline LAN."
+        ],
+        "dependencies": [
+          "Mail server (if used)"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "API",
+        "module": "Authentication",
+        "component": "Session Management",
+        "feature": "Secure session handling with idle timeouts and CSRF",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Simple",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 4,
+          "general": 0.6,
+          "service_api": 0,
+          "db_structure": 0,
+          "db_programming": 0,
+          "db_udf": 0
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "JWT for service calls, httpOnly cookies for Web UI."
+        ],
+        "risks": [],
+        "dependencies": [],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "User Management",
+        "component": "RBAC",
+        "feature": "School-based RBAC with role-specific module access",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "Roles: Admin, Teacher, Inspector, Admissions Officer, Student (limited)."
+        ],
+        "risks": [
+          "Privilege escalation bugs."
+        ],
+        "dependencies": [
+          "Authentication"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "User Management",
+        "component": "Access Management",
+        "feature": "Admin UI to create/delete users, assign/revoke roles, default permissions",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "Manual onboarding; no self sign-up."
+        ],
+        "risks": [
+          "Human error in role assignment."
+        ],
+        "dependencies": [
+          "RBAC"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Inspection Flow",
+        "component": "Start New Inspection",
+        "feature": "Initiate session with framework + metadata + optional SIS fetch",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 4,
+        "source_refs": [],
+        "assumptions": [
+          "SIS mapping via CSV/manual per SRS."
+        ],
+        "risks": [
+          "Framework version mismatch."
+        ],
+        "dependencies": [
+          "RBAC",
+          "Knowledge Base"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Inspection Flow",
+        "component": "Upload Evidence",
+        "feature": "Upload, validate, extract, tag, link to sections",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 3,
+        "source_refs": [],
+        "assumptions": [
+          "OCR fallback for images."
+        ],
+        "risks": [
+          "Corrupted or duplicate files."
+        ],
+        "dependencies": [
+          "Ingestion Service"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Report Generation",
+        "component": "Generate Report",
+        "feature": "Canvas view with sectioned report per framework; inline edit; narration",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 12,
+          "ui_module": 20,
+          "backend_logic": 20,
+          "general": 13.8,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 6,
+        "source_refs": [],
+        "assumptions": [
+          "Graph types fixed; text/values/colors editable only."
+        ],
+        "risks": [
+          "Long generation time for large reports."
+        ],
+        "dependencies": [
+          "Ingestion Service",
+          "Orchestration",
+          "TTS"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Output Management",
+        "component": "Reports Library",
+        "feature": "Search & filter prior reports; RBAC-based open read-only/edit",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 4,
+        "source_refs": [],
+        "assumptions": [
+          "Fuzzy search across titles/metadata."
+        ],
+        "risks": [
+          "Version mismatches."
+        ],
+        "dependencies": [
+          "RBAC",
+          "PDF storage"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Content & Planning",
+        "component": "Lesson Plan Generator",
+        "feature": "AI-assisted lesson plan generation aligned to curriculum with editing & export",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 12,
+          "ui_module": 20,
+          "backend_logic": 20,
+          "general": 13.8,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 5,
+        "source_refs": [],
+        "assumptions": [
+          "Plans saved as 'AI Draft' until teacher review."
+        ],
+        "risks": [
+          "Alignment drift vs standards."
+        ],
+        "dependencies": [
+          "KB/RAG",
+          "Orchestration"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Student Assistant",
+        "component": "Assistant Core",
+        "feature": "Scoped conversational assistant with RAG to teacher-approved materials",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 12,
+          "ui_module": 20,
+          "backend_logic": 20,
+          "general": 13.8,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 5,
+        "source_refs": [],
+        "assumptions": [
+          "Supervised use only; scope limited to configured subject/topic."
+        ],
+        "risks": [
+          "Out-of-scope queries."
+        ],
+        "dependencies": [
+          "KB/RAG",
+          "Moderation"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Admissions",
+        "component": "Process Assistant",
+        "feature": "Conversational support for intake, status queries, eligibility, scheduling",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 6,
+          "ui_module": 10,
+          "backend_logic": 10,
+          "general": 6.9,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 4,
+        "source_refs": [],
+        "assumptions": [
+          "Internal calendar; no external email integration."
+        ],
+        "risks": [
+          "Double bookings if calendar rules weak."
+        ],
+        "dependencies": [
+          "Applicant data"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Web",
+        "module": "Marketing",
+        "component": "Campaign Generator",
+        "feature": "Generate image+caption with canvas editor via Fabric.js; brand kit enforcement",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "Fabric.js",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 12,
+          "ui_module": 20,
+          "backend_logic": 20,
+          "general": 13.8,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 5,
+        "source_refs": [],
+        "assumptions": [
+          "Select images from local assets; no live posting."
+        ],
+        "risks": [
+          "GPU unavailability for generation."
+        ],
+        "dependencies": [
+          "Branding configuration"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "AI/ML",
+        "module": "AI Orchestration",
+        "component": "Router",
+        "feature": "Route to 4 LLMs, fallback handling, model chaining with lineage metadata",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "LangChain (or equivalent)",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 20,
+          "general": 9,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Streaming tokens to UI; chain-of-tools limited to internal modules."
+        ],
+        "risks": [
+          "Chain failures cascade."
+        ],
+        "dependencies": [
+          "LLM models available"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "AI/ML",
+        "module": "AI Orchestration",
+        "component": "Retrieval",
+        "feature": "Shared retrieval with FAISS + reranker; session-scoped indexes",
+        "make_or_reuse": "Reuse",
+        "reuse_source": "FAISS + bge-reranker",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 20,
+          "general": 9,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Batch embeddings; GPU if available."
+        ],
+        "risks": [
+          "Index/version drift."
+        ],
+        "dependencies": [
+          "Ingestion Service",
+          "PostgreSQL"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "API",
+        "module": "Communication & Security",
+        "component": "API Gateway",
+        "feature": "JWT auth, RBAC enforcement, mTLS between services on LAN subnet",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 10,
+          "general": 4.5,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Local CA for mTLS; endpoints bound to LAN subnet."
+        ],
+        "risks": [
+          "Certificate mismanagement."
+        ],
+        "dependencies": [
+          "Auth service"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "API",
+        "module": "Output Management",
+        "component": "PDF Service",
+        "feature": "Server-side PDF rendering with templates and annex support",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 10,
+          "general": 4.5,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Chromium print-to-PDF or wkhtmltopdf tooling packaged."
+        ],
+        "risks": [
+          "Memory spikes on long documents."
+        ],
+        "dependencies": [
+          "Report generation"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Data",
+        "module": "Database",
+        "component": "Schema Design",
+        "feature": "PostgreSQL schema for users, roles, sessions, uploads, KB, logs, reports",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Complex",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 20,
+          "general": 9,
+          "service_api": 14,
+          "db_structure": 10,
+          "db_programming": 14,
+          "db_udf": 2
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Cross-links to FAISS index metadata maintained."
+        ],
+        "risks": [
+          "Migration complexity."
+        ],
+        "dependencies": [
+          "PostgreSQL instance"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "DevOps",
+        "module": "DevOps",
+        "component": "Env & CI/CD",
+        "feature": "Appliance env setup, container orchestration, secrets, monitoring hooks",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 0,
+          "general": 24,
+          "service_api": 8,
+          "db_structure": 4,
+          "db_programming": 4,
+          "db_udf": 0
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Docker Compose/K8s-lite on appliance; local CA for mTLS."
+        ],
+        "risks": [
+          "On-prem variability across schools."
+        ],
+        "dependencies": [
+          "All services"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      },
+      {
+        "platform": "Data",
+        "module": "Logging & History",
+        "component": "Audit Trail",
+        "feature": "Event logs for prompts, uploads, model use, downloads",
+        "make_or_reuse": "Make",
+        "reuse_source": "",
+        "complexity": "Average",
+        "previous_project_actual": null,
+        "hours": {
+          "ui_design": 0,
+          "ui_module": 0,
+          "backend_logic": 10,
+          "general": 4.5,
+          "service_api": 7,
+          "db_structure": 5,
+          "db_programming": 7,
+          "db_udf": 1
+        },
+        "num_components": 1,
+        "source_refs": [],
+        "assumptions": [
+          "Structured JSON logs in Postgres/file; PII minimised."
+        ],
+        "risks": [
+          "Sensitive data leakage via logs."
+        ],
+        "dependencies": [
+          "RBAC"
+        ],
+        "assumed": true,
+        "total_hours": 0,
+        "contingency_pct": 0.1,
+        "total_hours_with_contingency": 0,
+        "single_resource_duration_days": 0,
+        "single_resource_duration_months": 0
+      }
+    ],
+    "summary": {
+      "row_count": 28,
+      "total_hours": 0,
+      "total_hours_with_contingency": 0,
+      "single_resource_duration_days": 0,
+      "single_resource_duration_months": 0,
+      "notes": []
+    }
+  }
+}]

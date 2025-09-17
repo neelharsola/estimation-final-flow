@@ -281,7 +281,21 @@ export default function EstimationsPage() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem className="text-red-600" onClick={async () => {
+                            if (!estimation.id) {
+                              sonnerToast.error("Missing estimation id");
+                              return;
+                            }
+                            // Confirm using toast-like UX could be added; for now, proceed directly with clear error handling
+                            try {
+                              await api.estimations.delete(estimation.id);
+                              sonnerToast.success("Estimation deleted");
+                              await loadEstimations();
+                            } catch (e: any) {
+                              const msg = e?.message || "Failed to delete";
+                              sonnerToast.error(msg);
+                            }
+                          }}>
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>

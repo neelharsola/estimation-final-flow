@@ -69,12 +69,52 @@ export const api = {
     update: (id: string, updates: Record<string, unknown>) => request(`/estimations/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
     delete: (id: string) => request(`/estimations/${id}`, { method: "DELETE" }),
     updateEnvelope: (id: string, envelope: any) => request(`/estimations/${id}/envelope`, { method: "PUT", body: JSON.stringify(envelope) }),
+    importEnvelope: (envelope: any) => request(`/estimations/import-envelope`, { method: "POST", body: JSON.stringify(envelope) }),
+    generateExcel: async (id: string) => {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API_URL}/estimations/${id}/export-excel`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let errorMessage = text || `HTTP ${res.status}`;
+        try { const data = JSON.parse(text); if (data.detail) errorMessage = data.detail; } catch {}
+        throw new Error(errorMessage);
+      }
+      return res.blob();
+    },
+    uploadExcel: async (id: string, file: File) => {
+      const token = localStorage.getItem("access_token");
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_URL}/estimations/${id}/upload-excel`, {
+        method: "POST",
+        body: fd,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let errorMessage = text || `HTTP ${res.status}`;
+        try { const data = JSON.parse(text); if (data.detail) errorMessage = data.detail; } catch {}
+        throw new Error(errorMessage);
+      }
+      return res.json();
+    },
+    populateFromExcel: (id: string, payload: any) => request(`/estimations/${id}/populate-from-excel`, { method: "POST", body: JSON.stringify(payload) }),
+    setResources: (id: string, resources: any[]) => request(`/estimations/${id}/resources`, { method: "PUT", body: JSON.stringify(resources) }),
   },
   users: {
     list: () => request("/api/v1/users"),
     update: (userId: string, updates: Record<string, unknown>) =>
       request(`/api/v1/users/${userId}`, { method: "PATCH", body: JSON.stringify(updates) }),
     updateMe: (updates: Record<string, unknown>) => request(`/api/v1/users/me`, { method: "PATCH", body: JSON.stringify(updates) }),
+  },
+  resources: {
+    list: () => request(`/resources`),
+    create: (payload: any) => request(`/resources`, { method: "POST", body: JSON.stringify(payload) }),
+    update: (id: string, updates: any) => request(`/resources/${id}`, { method: "PUT", body: JSON.stringify(updates) }),
+    delete: (id: string) => request(`/resources/${id}`, { method: "DELETE" }),
   },
   pricing: {
     rates: {

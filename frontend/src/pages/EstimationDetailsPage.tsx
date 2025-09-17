@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,33 @@ export default function EstimationDetailsPage() {
         versions: full.versions || [],
       };
       setEstimation(mapped);
-      setRows(mapped.envelope?.rows || []);
+      const initialRows = mapped.envelope?.rows || [];
+      if (initialRows.length > 0) {
+        setRows(initialRows);
+      } else {
+        const feats = (mapped.currentVersion?.features || []) as any[];
+        if (Array.isArray(feats) && feats.length > 0) {
+          const derived = feats.map((f: any) => {
+            const title: string = String(f.title || "");
+            const parts = title.split(" - ");
+            const module = parts[0] || "";
+            const component = parts[1] || "";
+            const feature = parts.slice(2).join(" - ") || "";
+            return {
+              platform: "Web",
+              module,
+              component,
+              feature,
+              make_or_reuse: "Make",
+              complexity: f.complexity || "Average",
+              num_components: 1,
+            };
+          });
+          setRows(derived);
+        } else {
+          setRows([]);
+        }
+      }
       setForm({
         projectTitle: mapped.projectTitle,
         clientName: mapped.clientName,
@@ -290,7 +316,7 @@ export default function EstimationDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Features</CardTitle>
-          <CardDescription>{rows.length} rows • {(Math.round(grandTotal * 100) / 100).toFixed(2)} base hours</CardDescription>
+          <CardDescription>{rows.length} items • Editable inline</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -305,15 +331,8 @@ export default function EstimationDetailsPage() {
                   <TableHead>Make/Reuse</TableHead>
                   <TableHead>Complexity</TableHead>
                   <TableHead>Components</TableHead>
-                  <TableHead>UI Design</TableHead>
-                  <TableHead>UI Module</TableHead>
-                  <TableHead>BL</TableHead>
-                  <TableHead>General</TableHead>
-                  <TableHead>Service/API</TableHead>
-                  <TableHead>DB Struct.</TableHead>
-                  <TableHead>DB Prog.</TableHead>
-                  <TableHead>DB UDF</TableHead>
-                  <TableHead className="text-right">Base Hours</TableHead>
+                  
+                  
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -388,94 +407,13 @@ export default function EstimationDetailsPage() {
                         <span className="cursor-pointer">{r.num_components ?? 0}</span>
                       )
                     }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "ui_design")}>{
-                      isEditing(i, "ui_design") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).ui_design ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_design: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).ui_design ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "ui_module")}>{
-                      isEditing(i, "ui_module") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).ui_module ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), ui_module: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).ui_module ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "backend_logic")}>{
-                      isEditing(i, "backend_logic") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).backend_logic ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), backend_logic: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).backend_logic ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "general")}>{
-                      isEditing(i, "general") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).general ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), general: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).general ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "service_api")}>{
-                      isEditing(i, "service_api") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).service_api ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), service_api: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).service_api ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "db_structure")}>{
-                      isEditing(i, "db_structure") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_structure ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_structure: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).db_structure ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "db_programming")}>{
-                      isEditing(i, "db_programming") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_programming ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_programming: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).db_programming ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "db_udf")}>{
-                      isEditing(i, "db_udf") ? (
-                        <Input autoFocus type="number" step="0.01" className="w-24 text-right" value={hoursOf(r).db_udf ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, hours: { ...(row.hours||{}), db_udf: Number(e.target.value) } } : row))} />
-                      ) : (
-                        <span className="cursor-pointer">{hoursOf(r).db_udf ?? 0}</span>
-                      )
-                    }</TableCell>
-                    <TableCell className="text-right font-medium">{(Math.round(baseHours(r) * 100) / 100).toFixed(2)}</TableCell>
+                    
+                    
+                    
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Project Summary</CardTitle>
-          <CardDescription>Calculated totals for the entire project estimation.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Base Hours</p>
-              <p className="text-2xl font-bold">{grandTotal.toFixed(2)}</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Hours w/ Contingency</p>
-              <p className="text-2xl font-bold">{totalWithContingency.toFixed(2)}</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Working Days</p>
-              <p className="text-2xl font-bold">{summary.single_resource_duration_days || 'N/A'}</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Duration (Months)</p>
-              <p className="text-2xl font-bold">{summary.single_resource_duration_months || 'N/A'}</p>
-            </div>
           </div>
         </CardContent>
       </Card>

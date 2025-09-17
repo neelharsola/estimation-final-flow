@@ -19,6 +19,7 @@ from app.routes.estimations import router as estimations_router
 from app.routes.pricing import router as pricing_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.tools import router as tools_router
+from app.routes.resources import router as resources_router
 from app.services.users import create_default_admin
 
 
@@ -138,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(pricing_router, prefix="/pricing", tags=["pricing"])
     app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
     app.include_router(tools_router, prefix="/tools", tags=["tools"])
+    app.include_router(resources_router, tags=["resources"]) 
     
     return app
 

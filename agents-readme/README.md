@@ -1,3 +1,29 @@
+# Estimation JSON ↔ Excel Roundtrip
+
+## New Columns in Export
+- Row ID: stable identifier per row for mapping on re-import.
+
+## Matching Strategy
+1) Prefer `Row ID` if present.
+2) Fallback to SHA1 of `Platform|Module|Component|Feature` (case/space-normalized).
+
+## Minimal Fields
+- Platform, Module, Component, Features, Make/Reuse, Complexity.
+
+## APIs
+- POST `/estimations/import-envelope` → { estimation_id }
+- GET `/estimations/{id}/export-excel` → Excel
+- POST `/estimations/{id}/upload-excel` → { matched, updated, unmatched, rows }
+- POST `/estimations/{id}/populate-from-excel` → applies rows/resources
+- Resources CRUD: GET/POST/PUT/DELETE `/resources`
+
+## Roles
+- Admin: all actions, can manage resources.
+- Estimator/Ops: can create estimations, update their own, select resources.
+
+## Samples
+- See `agents-readme/sample.FILLED.xlsx` and `agents-readme/estimation_db.estimations.json`.
+
 ## Agents Handbook
 
 This folder is a compact, high-signal guide for autonomous agents working on this project. It explains the stack, key flows, API surfaces, and where to make changes.

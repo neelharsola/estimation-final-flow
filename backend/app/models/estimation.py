@@ -29,6 +29,8 @@ class PreviousProjectActual(BaseModel):
 
 
 class EstimationRow(BaseModel):
+    # Unique stable identifier for roundtrip Excel mapping
+    row_id: Optional[str] = None
     platform: str
     module: str
     component: str

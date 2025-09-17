@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast as sonnerToast } from "sonner";
 import {
-  Dialog,
-  DialogContent,
+  Dialog as UIDialog,
+  DialogContent as UIDialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -53,6 +53,7 @@ interface ProjectInfo {
 }
 
 interface EstimationRow {
+  row_id?: string;
   platform: string;
   module: string;
   component: string;
@@ -60,16 +61,6 @@ interface EstimationRow {
   make_or_reuse: "Make" | "Reuse";
   reuse_source?: string;
   complexity: "Simple" | "Average" | "Complex";
-  hours: {
-    ui_design: number;
-    ui_module: number;
-    backend_logic: number;
-    general: number;
-    service_api: number;
-    db_structure: number;
-    db_programming: number;
-    db_udf: number;
-  };
   num_components: number;
   assumptions?: string[];
   risks?: string[];
@@ -90,16 +81,6 @@ const initialRow: EstimationRow = {
   make_or_reuse: "Make",
   reuse_source: "",
   complexity: "Average",
-  hours: {
-    ui_design: 0,
-    ui_module: 0,
-    backend_logic: 0,
-    general: 0,
-    service_api: 0,
-    db_structure: 0,
-    db_programming: 0,
-    db_udf: 0,
-  },
   num_components: 1,
   assumptions: [],
   risks: [],
@@ -107,10 +88,10 @@ const initialRow: EstimationRow = {
 };
 
 const steps = [
-  { id: 1, title: "Project Info", icon: FileText },
-  { id: 2, title: "Features", icon: Calculator },
-  { id: 3, title: "Resources", icon: Users },
-  { id: 4, title: "Review", icon: CheckCircle },
+  { id: 1, title: "Import JSON", icon: FileText },
+  { id: 2, title: "Review & Export", icon: Calculator },
+  { id: 3, title: "Upload Excel", icon: FileText },
+  { id: 4, title: "Resources & Finalize", icon: Users },
 ];
 
 interface EstimationStepperProps {
@@ -132,6 +113,52 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
     rows: [{ ...initialRow }],
   });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [estimationId, setEstimationId] = useState<string | null>(null);
+  const [resources, setResources] = useState<Array<{ role: string; count: number; days: number }>>([]);
+  const [allResources, setAllResources] = useState<any[]>([]);
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const [newResOpen, setNewResOpen] = useState(false);
+  const [newResName, setNewResName] = useState("");
+  const [newResRole, setNewResRole] = useState("");
+  const [newResRates, setNewResRates] = useState<{ AED?: number; INR?: number; USD?: number; POUND?: number }>({ AED: 0, INR: 0, USD: 0, POUND: 0 });
+
+  // persist helper
+  const persistEnvelope = useCallback(async (data: EstimationData): Promise<string> => {
+    try {
+      const envelope = {
+        schema_version: data.schema_version,
+        project: {
+          name: data.project.name,
+          client: data.project.client,
+          description: data.project.description || "",
+          estimator: { name: user?.name || "Unknown", id: 1 },
+        },
+        rows: data.rows.map(r => ({
+          row_id: r.row_id,
+          platform: r.platform,
+          module: r.module,
+          component: r.component,
+          feature: r.feature,
+          make_or_reuse: r.make_or_reuse,
+          reuse_source: r.reuse_source || "",
+          complexity: r.complexity,
+          num_components: r.num_components,
+        })),
+      };
+      if (!estimationId) {
+        const res = await api.estimations.importEnvelope(envelope);
+        const id = res.estimation_id || res.id;
+        setEstimationId(id);
+        return id;
+      } else {
+        await api.estimations.updateEnvelope(estimationId, envelope);
+        return estimationId;
+      }
+    } catch (e) {
+      // silent toast to avoid spamming
+      return Promise.reject(e);
+    }
+  }, [estimationId, user]);
 
   const handleJSONUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -147,7 +174,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           throw new Error("Invalid JSON structure");
         }
 
-        setEstimationData({
+        const nextData: EstimationData = {
           schema_version: jsonData.schema_version || "1.0",
           project: {
             name: jsonData.project.name || "",
@@ -162,22 +189,15 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             make_or_reuse: row.make_or_reuse || "Make",
             reuse_source: row.reuse_source || "",
             complexity: row.complexity || "Average",
-            hours: {
-              ui_design: row.hours?.ui_design || 0,
-              ui_module: row.hours?.ui_module || 0,
-              backend_logic: row.hours?.backend_logic || 0,
-              general: row.hours?.general || 0,
-              service_api: row.hours?.service_api || 0,
-              db_structure: row.hours?.db_structure || 0,
-              db_programming: row.hours?.db_programming || 0,
-              db_udf: row.hours?.db_udf || 0,
-            },
             num_components: row.num_components || 1,
             assumptions: row.assumptions || [],
             risks: row.risks || [],
             dependencies: row.dependencies || [],
           })),
-        });
+        };
+        setEstimationData(nextData);
+        // create estimation immediately
+        persistEnvelope(nextData);
 
         sonnerToast.success("JSON uploaded successfully! Form has been populated.");
         
@@ -210,28 +230,15 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   };
 
   const updateRow = (index: number, field: string, value: any) => {
-    setEstimationData(prev => ({
+    setEstimationData(prev => {
+      const next = {
       ...prev,
-      rows: prev.rows.map((row, i) => 
-        i === index 
-          ? { ...row, [field]: value }
-          : row
-      ),
-    }));
-  };
-
-  const updateRowHours = (index: number, hourType: string, value: number) => {
-    setEstimationData(prev => ({
-      ...prev,
-      rows: prev.rows.map((row, i) => 
-        i === index 
-          ? { 
-              ...row, 
-              hours: { ...row.hours, [hourType]: value }
-            }
-          : row
-      ),
-    }));
+        rows: prev.rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+      };
+      // persist after local update
+      persistEnvelope(next);
+      return next;
+    });
   };
 
   const handleProcessAndDownload = async () => {
@@ -245,42 +252,15 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       return;
     }
 
-    // Duplicate project name check
-    try {
-      const existing = await api.estimations.list();
-      const titles = (existing || []).map((e: any) => (e.title || e.name || "").toLowerCase());
-      if (titles.includes(estimationData.project.name.trim().toLowerCase())) {
-        sonnerToast.error("Project name already exists. Please choose a different name.");
-        return;
-      }
-    } catch {}
+    // Skip duplicate name check to allow regeneration even if a project exists
 
     setIsProcessing(true);
     try {
-      // Create JSON file from current data with updated structure
-      const jsonData = {
-        schema_version: "1.0",
-        project: {
-          name: estimationData.project.name,
-          client: estimationData.project.client,
-          description: estimationData.project.description || "",
-          estimator: {
-            name: user?.name || "Unknown",
-            id: 1
-          }
-        },
-        rows: estimationData.rows.length > 0 ? estimationData.rows : []
-      };
-      
-      const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], {
-        type: "application/json",
-      });
-      const jsonFile = new File([jsonBlob], `${estimationData.project.name}.json`, {
-        type: "application/json",
-      });
-
-      // Send to backend for processing
-      const excelBlob = await api.tools.processEstimation(jsonFile);
+      // Ensure envelope persisted / created
+      const id = await persistEnvelope(estimationData);
+      if (!id) throw new Error("Failed to create estimation");
+      // Generate Excel from latest envelope
+      const excelBlob = await api.estimations.generateExcel(id);
       
       // Download the processed Excel file
       const url = URL.createObjectURL(excelBlob);
@@ -290,7 +270,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       a.click();
       URL.revokeObjectURL(url);
 
-      sonnerToast.success("Excel generated and estimation saved.");
+      sonnerToast.success("Excel generated from latest envelope.");
       
       // Notify parent component and close
       if (onComplete) {
@@ -306,7 +286,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
         onComplete(estimation);
       }
       
-      onOpenChange(false);
+      // keep dialog open to continue to next steps
     } catch (error: any) {
       console.error("Processing error:", error);
       const message = error?.message || "Failed to process estimation. Please try again.";
@@ -328,12 +308,79 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
     }
   };
 
-  const calculateTotalHours = (row: EstimationRow): number => {
-    return Object.values(row.hours).reduce((sum, hours) => sum + hours, 0);
+  const onUploadExcel = async (file: File) => {
+    try {
+      if (!estimationId) {
+        await persistEnvelope(estimationData);
+      }
+      const id = estimationId as string;
+      const result = await api.estimations.uploadExcel(id, file);
+      const { matched, updated, unmatched, rows, resources: parsedResources } = result || { matched: 0, updated: 0, unmatched: 0, rows: [], resources: [] };
+      if (Array.isArray(rows) && rows.length > 0) {
+        setEstimationData(prev => {
+          const nextRows = [...prev.rows];
+          const byId = new Map<string, number>();
+          nextRows.forEach((r, idx) => { if (r.row_id) byId.set(r.row_id, idx); });
+          rows.forEach((r: any) => {
+            const idx = r.row_id && byId.has(r.row_id) ? (byId.get(r.row_id) as number) : -1;
+            if (idx >= 0) {
+              nextRows[idx] = {
+                ...nextRows[idx],
+                platform: r.platform ?? nextRows[idx].platform,
+                module: r.module ?? nextRows[idx].module,
+                component: r.component ?? nextRows[idx].component,
+                feature: r.feature ?? nextRows[idx].feature,
+                make_or_reuse: r.make_or_reuse ?? nextRows[idx].make_or_reuse,
+                complexity: r.complexity ?? nextRows[idx].complexity,
+              };
+            }
+          });
+          const updatedData = { ...prev, rows: nextRows };
+          persistEnvelope(updatedData);
+          return updatedData;
+        });
+      }
+      if (Array.isArray(parsedResources) && parsedResources.length > 0) {
+        setResources(parsedResources.map((r: any) => ({ role: r.role, count: r.count, days: r.days, allocation_type: r.allocation_type || "pt" })));
+      }
+      sonnerToast.success(`Excel uploaded. Matched: ${matched}, Updated: ${updated}, Unmatched: ${unmatched}`);
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Failed to parse Excel");
+    }
   };
 
-  const calculateGrandTotal = (): number => {
-    return estimationData.rows.reduce((total, row) => total + calculateTotalHours(row), 0);
+  useEffect(() => {
+    (async () => {
+      try { const list = await api.resources.list(); setAllResources(list || []); } catch {}
+    })();
+  }, []);
+
+  const addResourceToRow = (index: number, resourceId: string) => {
+    const found = allResources.find((r) => (r.id || r._id) === resourceId);
+    if (!found) return;
+    setResources((prev) => {
+      const next = [...prev];
+      next[index] = next[index] || { role: found.role, count: 1, days: 10 };
+      next[index].role = found.role;
+      return next;
+    });
+  };
+
+  const quickCreateResource = async () => {
+    if (!isAdmin) return;
+    try {
+      const name = window.prompt("Resource name") || "";
+      const role = window.prompt("Role") || "";
+      const usdStr = window.prompt("USD day rate (optional)") || "";
+      if (!name || !role) return;
+      const payload: any = { name, role, rates: {} };
+      if (usdStr) payload.rates.USD = Number(usdStr) || 0;
+      const created = await api.resources.create(payload);
+      setAllResources((prev) => [created, ...prev]);
+      sonnerToast.success("Resource added");
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Failed to add resource");
+    }
   };
 
   const renderStepContent = () => {
@@ -437,13 +484,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 2:
         return (
           <div className="space-y-6">
-            
-            
+            {/* Review parsed rows, inline edit of six fields */}
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Feature Breakdown</h3>
+              <h3 className="text-lg font-semibold">Review Rows</h3>
               <Button onClick={addRow} className="gap-2">
                 <Plus className="w-4 h-4" />
-                Add Feature
+                Add Row
               </Button>
             </div>
             
@@ -506,7 +552,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Feature Description</Label>
+                      <Label>Features</Label>
                       <Textarea
                         value={row.feature}
                         onChange={(e) => updateRow(index, "feature", e.target.value)}
@@ -549,15 +595,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                         </Select>
                       </div>
                       
-                      <div className="space-y-2">
-                        <Label>Components Count</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={row.num_components}
-                          onChange={(e) => updateRow(index, "num_components", Number(e.target.value))}
-                        />
-                      </div>
+                      {/* No hours/time fields in this step */}
                     </div>
                     
                     {row.make_or_reuse === "Reuse" && (
@@ -580,131 +618,20 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 3:
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Resource Allocation</h3>
-            
-            <div className="space-y-4">
-              {estimationData.rows.map((row, index) => (
-                <Card key={index} className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="font-medium">{row.feature || `Feature #${index + 1}`}</h4>
-                      <p className="text-sm text-muted-foreground">{row.module} - {row.component}</p>
-                    </div>
-                    <Badge variant="outline">
-                      {calculateTotalHours(row)} hours
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label>UI Design</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.ui_design}
-                        onChange={(e) => updateRowHours(index, "ui_design", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>UI Module</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.ui_module}
-                        onChange={(e) => updateRowHours(index, "ui_module", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Backend Logic</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.backend_logic}
-                        onChange={(e) => updateRowHours(index, "backend_logic", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>General</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.general}
-                        onChange={(e) => updateRowHours(index, "general", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Service/API</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.service_api}
-                        onChange={(e) => updateRowHours(index, "service_api", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>DB Structure</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.db_structure}
-                        onChange={(e) => updateRowHours(index, "db_structure", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>DB Programming</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.db_programming}
-                        onChange={(e) => updateRowHours(index, "db_programming", Number(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>DB UDF</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={row.hours.db_udf}
-                        onChange={(e) => updateRowHours(index, "db_udf", Number(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-            
-            <Card className="p-4 bg-muted/50">
               <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Export & Upload Excel</h3>
+              <div className="flex gap-2">
+                <Button onClick={handleProcessAndDownload} className="gap-2" disabled={isProcessing}>
+                  <Download className="w-4 h-4" /> Download Excel
+                </Button>
                 <div>
-                  <h4 className="font-semibold">Total Estimation</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {estimationData.rows.length} features • {calculateGrandTotal()} base hours
-                  </p>
+                  <Input type="file" accept=".xlsx" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadExcel(f); e.currentTarget.value = ""; }} />
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold">
-                    {Math.round(calculateGrandTotal() * 1.1)} hours
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    With 10% contingency
-                  </p>
                 </div>
-              </div>
+            <Card className="p-4">
+              <h4 className="font-medium mb-4">Upload Summary</h4>
+              <p className="text-sm text-muted-foreground">After uploading, proceed to select resources.</p>
             </Card>
           </div>
         );
@@ -712,7 +639,126 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 4:
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Review & Save</h3>
+            <h3 className="text-lg font-semibold">Resources & Finalize</h3>
+            <Card className="p-4">
+              <h4 className="font-medium mb-4">General Resources</h4>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Resources</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>No. of Resources</TableHead>
+                      <TableHead>Allocation</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resources.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6}>
+                          <p className="text-sm text-muted-foreground">Upload Excel or add resources.</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : resources.map((r, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell>
+                          <Select value={r.role} onValueChange={(val) => {
+                            if (val === "__modal__") { setNewResOpen(true); return; }
+                            setResources(prev => prev.map((row, i) => i === idx ? { ...row, role: val } : row))
+                          }}>
+                            <SelectTrigger><SelectValue placeholder="Select resource" /></SelectTrigger>
+                            <SelectContent>
+                              {allResources.map((ar: any) => (
+                                <SelectItem key={ar.id || ar._id} value={ar.role}>{ar.role} — {ar.name}</SelectItem>
+                              ))}
+                              {isAdmin && <SelectItem value="__modal__">+ Add new resource…</SelectItem>}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" min="0" value={r.days} onChange={(e) => setResources(prev => prev.map((row, i) => i === idx ? { ...row, days: Number(e.target.value) } : row))} className="w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" min="0" value={r.count} onChange={(e) => setResources(prev => prev.map((row, i) => i === idx ? { ...row, count: Number(e.target.value) } : row))} className="w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Select value={(r as any).allocation_type || "pt"} onValueChange={(val) => setResources(prev => prev.map((row, i) => i === idx ? { ...row, allocation_type: val as any } : row))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pt">Part time</SelectItem>
+                              <SelectItem value="ft">Full time</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => setResources(prev => prev.filter((_, i) => i !== idx))}>Remove</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex justify-between mt-4">
+                <Button variant="outline" size="sm" onClick={() => setResources(prev => [...prev, { role: allResources[0]?.role || "AI/ML Developer", count: 1, days: 5, allocation_type: "pt" as any }])}>Add Row</Button>
+                <Button onClick={async () => {
+                  try {
+                    if (!estimationId) await persistEnvelope(estimationData);
+                    const id = (estimationId as string) || "";
+                    await api.estimations.setResources(id, resources as any);
+                    sonnerToast.success("Resources saved.");
+                  } catch (e: any) {
+                    sonnerToast.error(e?.message || "Failed to save resources");
+                  }
+                }}>Save Resources</Button>
+              </div>
+            </Card>
+
+            {isAdmin && (
+              <UIDialog open={newResOpen} onOpenChange={setNewResOpen}>
+                <UIDialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Resource</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Role</Label>
+                      <Input value={newResRole} onChange={(e) => setNewResRole(e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>AED</Label>
+                        <Input type="number" value={newResRates.AED ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, AED: Number(e.target.value) }))} />
+                      </div>
+                      <div>
+                        <Label>INR</Label>
+                        <Input type="number" value={newResRates.INR ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, INR: Number(e.target.value) }))} />
+                      </div>
+                      <div>
+                        <Label>USD</Label>
+                        <Input type="number" value={newResRates.USD ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, USD: Number(e.target.value) }))} />
+                      </div>
+                      <div>
+                        <Label>POUND</Label>
+                        <Input type="number" value={newResRates.POUND ?? 0} onChange={(e) => setNewResRates(r => ({ ...r, POUND: Number(e.target.value) }))} />
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setNewResOpen(false)}>Cancel</Button>
+                    <Button onClick={async () => {
+                      if (!newResName || !newResRole) return;
+                      const created = await api.resources.create({ name: newResName, role: newResRole, rates: newResRates });
+                      setAllResources(prev => [created, ...prev]);
+                      setNewResName(""); setNewResRole(""); setNewResRates({ AED: 0, INR: 0, USD: 0, POUND: 0 });
+                      setNewResOpen(false);
+                    }}>Create</Button>
+                  </DialogFooter>
+                </UIDialogContent>
+              </UIDialog>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="p-4">
@@ -734,14 +780,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                     <span className="text-muted-foreground">Features:</span>
                     <span>{estimationData.rows.length}</span>
                   </div>
+                  {resources.length > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Base Hours:</span>
-                    <span>{calculateGrandTotal()}</span>
+                      <span className="text-muted-foreground">Resources Parsed:</span>
+                      <span>{resources.length}</span>
                   </div>
-                  <div className="flex justify-between font-medium">
-                    <span>Total with Contingency:</span>
-                    <span>{Math.round(calculateGrandTotal() * 1.1)}</span>
-                  </div>
+                  )}
                 </div>
               </Card>
               
@@ -777,8 +821,8 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                       <TableHead>Feature</TableHead>
                       <TableHead>Make/Reuse</TableHead>
                       <TableHead>Complexity</TableHead>
-                      <TableHead>Components</TableHead>
-                      <TableHead className="text-right">Hours</TableHead>
+                      
+                      
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -796,8 +840,8 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                           ) : null}
                         </TableCell>
                         <TableCell>{row.complexity}</TableCell>
-                        <TableCell>{row.num_components}</TableCell>
-                        <TableCell className="text-right">{calculateTotalHours(row)}</TableCell>
+                        
+                        
                       </TableRow>
                     ))}
                   </TableBody>
@@ -807,27 +851,9 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             
             <Card className="p-6">
               <div className="text-center space-y-4">
-                <h4 className="text-xl font-semibold">Save Estimation</h4>
-                <p className="text-muted-foreground">
-                  Review all details above. Click save to generate and download the Excel and persist the estimation.
-                </p>
-                <Button
-                  onClick={handleProcessAndDownload}
-                  disabled={isProcessing || !estimationData.project.name.trim() || !estimationData.project.client.trim()}
-                  className="gap-2 px-8 py-3"
-                  size="lg"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4" />
-                      Save Estimation
-                    </>
-                  )}
+                <h4 className="text-xl font-semibold">Download final Excel</h4>
+                <Button onClick={handleProcessAndDownload} disabled={isProcessing} className="gap-2 px-8 py-3" size="lg">
+                  <Download className="w-4 h-4" /> Download Excel
                 </Button>
               </div>
             </Card>
@@ -840,8 +866,8 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+    <UIDialog open={open} onOpenChange={onOpenChange}>
+      <UIDialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-primary" />
@@ -852,8 +878,9 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           </DialogDescription>
         </DialogHeader>
 
-        {/* Stepper Navigation */}
-        <div className="flex items-center justify-center mb-6">
+        {/* Stepper Navigation + Top Controls */}
+        <div className="mb-6">
+          <div className="flex items-center justify-center">
           <div className="flex items-center">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
@@ -880,6 +907,27 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                 )}
               </div>
             ))}
+          </div>
+          </div>
+          <div className="flex justify-between mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentStep(prev => Math.max(1, prev - 1))}
+              disabled={currentStep === 1}
+              className="gap-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </Button>
+            {currentStep < steps.length ? (
+              <Button
+                onClick={() => setCurrentStep(prev => Math.min(steps.length, prev + 1))}
+                className="gap-2"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -911,7 +959,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             ) : null}
           </div>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </UIDialogContent>
+    </UIDialog>
   );
 }
