@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 interface ProjectInfo {
   name: string;
@@ -127,9 +128,17 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   
   // Debug logging
   console.log("Current user:", user, "isAdmin:", isAdmin);
-  const [newResOpen, setNewResOpen] = useState(false);
-  const [newResRole, setNewResRole] = useState("");
-  const [newResRates, setNewResRates] = useState<{ AED?: number; INR?: number; USD?: number; POUND?: number }>({ AED: 0, INR: 0, USD: 0, POUND: 0 });
+  const [newRoleName, setNewRoleName] = useState("");
+
+  const handleCreateNewRole = async (roleName: string) => {
+    try {
+      const created = await api.resources.create({ name: roleName, role: roleName, rates: {} });
+      setAllResources(prev => [created, ...prev]);
+      sonnerToast.success(`Role '${roleName}' created successfully.`);
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Failed to create new role.");
+    }
+  };
 
   // persist helper
   const persistEnvelope = useCallback(async (data: EstimationData, resources?: any[]): Promise<string> => {
@@ -684,24 +693,59 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                           <p className="text-sm text-muted-foreground">Upload Excel or add resources.</p>
                         </TableCell>
                       </TableRow>
-                    ) : resources.map((r, idx) => (
+                    ) : resources.map((r, idx) => {
+                      const usedRoles = resources.map(res => res.role);
+                      const availableResources = allResources.filter(ar => !usedRoles.includes(ar.role) || ar.role === r.role);
+
+                      return (
                       <TableRow key={idx}>
                         <TableCell>{idx + 1}</TableCell>
                         <TableCell>
                           <Select value={r.role} onValueChange={(val) => {
-                            if (val === "__modal__") { 
-                              console.log("Opening new resource dialog"); 
-                              setNewResOpen(true); 
-                              return; 
-                            }
                             setResources(prev => prev.map((row, i) => i === idx ? { ...row, role: val } : row))
                           }}>
                             <SelectTrigger><SelectValue placeholder="Select resource" /></SelectTrigger>
                             <SelectContent>
-                              {allResources.map((ar: any) => (
+                              {availableResources.map((ar: any) => (
                                 <SelectItem key={ar.id || ar._id} value={ar.role}>{ar.role}</SelectItem>
                               ))}
-                              {isAdmin && <SelectItem value="__modal__">+ Add new resource…</SelectItem>}
+                              {isAdmin && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <div className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground">
+                                      + Add new resource…
+                                    </div>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-80">
+                                    <div className="grid gap-4">
+                                      <div className="space-y-2">
+                                        <h4 className="font-medium leading-none">Add New Role</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                          Create a new resource role.
+                                        </p>
+                                      </div>
+                                      <div className="grid gap-2">
+                                        <Label htmlFor="new-role-name">Role Name</Label>
+                                        <Input
+                                          id="new-role-name"
+                                          value={newRoleName}
+                                          onChange={(e) => setNewRoleName(e.target.value)}
+                                          className="col-span-2 h-8"
+                                        />
+                                        <Button
+                                          onClick={() => {
+                                            handleCreateNewRole(newRoleName);
+                                            setNewRoleName("");
+                                          }}
+                                          disabled={!newRoleName.trim()}
+                                        >
+                                          Create
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
                             </SelectContent>
                           </Select>
                         </TableCell>
@@ -715,7 +759,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                           <Button variant="ghost" size="sm" onClick={() => setResources(prev => prev.filter((_, i) => i !== idx))}>Remove</Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               </div>
@@ -729,79 +773,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
               </div>
             </Card>
 
-            {isAdmin && (
-              <UIDialog open={newResOpen} onOpenChange={setNewResOpen}>
-                <UIDialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Resource</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-2"><Label className="text-lg">Role</Label></div>
-                      <Input value={newResRole} onChange={(e) => setNewResRole(e.target.value)} />
-                    </div>
-                    <br />
-                    <Label className="text-xl">Hourly Rates</Label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>AED</Label>
-                        <Input type="number" value={newResRates.AED ?? 0} onChange={async (e) => {
-                          const aed = Number(e.target.value) || 0;
-                          // Fixed conversion rates based on provided table
-                          const USD = 0.2723 * aed;
-                          const INR = 23.98 * aed;
-                          const GBP = 0.20 * aed;
-                          setNewResRates({ AED: aed, USD: Number(USD.toFixed(2)), INR: Number(INR.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
-                        }} />
-                      </div>
-                      <div>
-                        <Label>INR</Label>
-                        <Input type="number" value={newResRates.INR ?? 0} onChange={async (e) => {
-                          const inr = Number(e.target.value) || 0;
-                          // Using fixed table: 1 INR = 0.0114 USD, 0.0416 AED, 0.0083 GBP
-                          const USD = 0.0114 * inr;
-                          const AED = 0.0416 * inr;
-                          const GBP = 0.0083 * inr;
-                          setNewResRates({ INR: inr, USD: Number(USD.toFixed(2)), AED: Number(AED.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
-                        }} />
-                      </div>
-                      <div>
-                        <Label>USD</Label>
-                        <Input type="number" value={newResRates.USD ?? 0} onChange={async (e) => {
-                          const usd = Number(e.target.value) || 0;
-                          // Using fixed table: 1 USD = 3.6725 AED, 87.78 INR, 0.73 GBP
-                          const AED = 3.6725 * usd;
-                          const INR = 87.78 * usd;
-                          const GBP = 0.73 * usd;
-                          setNewResRates({ USD: usd, AED: Number(AED.toFixed(2)), INR: Number(INR.toFixed(2)), POUND: Number(GBP.toFixed(2)) });
-                        }} />
-                      </div>
-                      <div>
-                        <Label>POUND</Label>
-                        <Input type="number" value={newResRates.POUND ?? 0} onChange={async (e) => {
-                          const gbp = Number(e.target.value) || 0;
-                          // Using fixed table: 1 GBP = 5.01 AED, 119.75 INR, 1.3649 USD
-                          const AED = 5.01 * gbp;
-                          const INR = 119.75 * gbp;
-                          const USD = 1.3649 * gbp;
-                          setNewResRates({ POUND: gbp, AED: Number(AED.toFixed(2)), INR: Number(INR.toFixed(2)), USD: Number(USD.toFixed(2)) });
-                        }} />
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setNewResOpen(false)}>Cancel</Button>
-                    <Button onClick={async () => {
-                      if (!newResRole) return;
-                      const created = await api.resources.create({ name: newResRole, role: newResRole, rates: newResRates });
-                      setAllResources(prev => [created, ...prev]);
-                      setNewResRole(""); setNewResRates({ AED: 0, INR: 0, USD: 0, POUND: 0 });
-                      setNewResOpen(false);
-                    }}>Create</Button>
-                  </DialogFooter>
-                </UIDialogContent>
-              </UIDialog>
-            )}
+            
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="p-4">
