@@ -126,8 +126,6 @@ async def update_envelope_data(estimation_id: str, envelope: dict) -> Optional[E
     if result.matched_count == 0:
         return None
     est = await get_estimation(estimation_id)
-    if est:
-        asyncio.create_task(ExcelService.generate_excel(est))
     return est
 
 

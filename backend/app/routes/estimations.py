@@ -28,6 +28,7 @@ from app.services.excel import ExcelService
 from io import BytesIO
 from openpyxl import load_workbook
 import hashlib
+import asyncio
 
 
 router = APIRouter()
@@ -153,6 +154,7 @@ async def import_envelope(payload: dict, user_id: str = Depends(get_current_user
         "is_temporary": True
     })
 
+    estimation_id_to_return = None
     if existing_temp:
         # Overwrite the existing temporary estimation
         existing_id = existing_temp["_id"]
@@ -161,17 +163,24 @@ async def import_envelope(payload: dict, user_id: str = Depends(get_current_user
             del update_doc["_id"]  # Don't try to update the _id
         
         await db.estimations.update_one({"_id": existing_id}, {"$set": update_doc})
-        return {"estimation_id": str(existing_id), "temporary": True}
+        estimation_id_to_return = str(existing_id)
     else:
         # No existing temporary one, so try to create a new one
         try:
             created = await create_estimation(est)
-            return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
+            estimation_id_to_return = created.id or getattr(created, "_id", None)
         except DuplicateKeyError:
             # A finalized estimation with this title exists. Append suffix and retry.
             est.title = f"{est.title} - Copy {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
             created = await create_estimation(est)
-            return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
+            estimation_id_to_return = created.id or getattr(created, "_id", None)
+
+    if estimation_id_to_return:
+        est_obj = await get_estimation(estimation_id_to_return)
+        if est_obj:
+            asyncio.create_task(ExcelService.generate_excel(est_obj))
+
+    return {"estimation_id": estimation_id_to_return, "temporary": True}
 
 
 @router.post("/{estimation_id}/finalize")
