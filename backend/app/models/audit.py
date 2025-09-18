@@ -16,13 +16,17 @@ class AuditLog(BaseModel):
     user_id: str
     action: Literal[
         "CREATE_ESTIMATE",
-        "VIEW_ESTIMATE", 
+        "VIEW_ESTIMATE",
         "DOWNLOAD_EXCEL",
         "LOGIN",
         "LOGOUT",
         "CREATE_USER",
         "UPDATE_USER",
-        "DELETE_USER"
+        "DELETE_USER",
+        "CREATE_RATE",
+        "UPDATE_RATE",
+        "DELETE_RATE",
+        "UPDATE_PROJECT_RESOURCES"
     ]
     resource_id: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)

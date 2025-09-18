@@ -56,7 +56,11 @@ export default function Pricing() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Record<string, { hour_rate?: string; currency?: string }>>({});
   const [summary, setSummary] = useState<{ subtotal: number; discount_pct: number; contingency_pct: number; final_total: number; total_hours: number; currency: string } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const { toast } = useToast();
+
+  const userMap = new Map(users.map(u => [u.id, u.name]));
 
   const handleNewRole = async (newRole: any) => {
     try {
@@ -90,6 +94,10 @@ export default function Pricing() {
         description: `New role '${name}' with regional pricing has been added.`,
       });
 
+      // Refresh audit logs
+      const logs = await api.audit.list();
+      setAuditLogs(logs || []);
+
     } catch (error) {
       console.error("Failed to create new role:", error);
       toast({
@@ -113,6 +121,13 @@ export default function Pricing() {
           updated_at: p.updated_at,
         }));
         setProjects(mapped);
+
+        const logs = await api.audit.list();
+        setAuditLogs(logs || []);
+
+        const userList = await api.users.list();
+        setUsers(userList || []);
+
       } catch {}
     })();
   }, []);
@@ -175,7 +190,19 @@ export default function Pricing() {
       }));
       setResources(mapped);
       setEditing({});
-    } catch {}
+
+      // Refresh audit logs
+      const logs = await api.audit.list();
+      setAuditLogs(logs || []);
+
+    } catch (error) {
+      console.error("Failed to save changes:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save changes.",
+        variant: "destructive",
+      });
+    }
     setSaving(false);
   };
 
@@ -189,6 +216,70 @@ export default function Pricing() {
     };
     return flags[region] || "🌍";
   };
+
+  const renderAuditLog = (log: any) => {
+    const { action, metadata, timestamp, user_id } = log;
+    const date = new Date(timestamp).toISOString().split('T')[0];
+
+    switch (action) {
+        case "CREATE_RATE":
+            return (
+                <div key={log.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-border/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-green-500/10 rounded-lg flex items-center justify-center">
+                            <Plus className="w-4 h-4 text-green-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium">New rate for {metadata.role}</p>
+                            <p className="text-xs text-muted-foreground">Set to {metadata.day_rate} {metadata.currency}</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm">{userMap.get(user_id) || user_id}</p>
+                        <p className="text-xs text-muted-foreground">{date}</p>
+                    </div>
+                </div>
+            );
+        case "UPDATE_RATE":
+            return (
+                <div key={log.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-border/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center">
+                            <Edit className="w-4 h-4 text-orange-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium">Rate updated for {metadata.old.role}</p>
+                            <p className="text-xs text-muted-foreground">From {metadata.old.day_rate} to {metadata.new.day_rate}</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm">{userMap.get(user_id) || user_id}</p>
+                        <p className="text-xs text-muted-foreground">{date}</p>
+                    </div>
+                </div>
+            );
+        case "UPDATE_PROJECT_RESOURCES":
+             return (
+                <div key={log.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-border/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                            <Users className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium">Project resources updated</p>
+                            <p className="text-xs text-muted-foreground">Project ID: {log.resource_id}</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm">{userMap.get(user_id) || user_id}</p>
+                        <p className="text-xs text-muted-foreground">{date}</p>
+                    </div>
+                </div>
+            );
+        default:
+            return null;
+    }
+}
 
   return (
     <div className="space-y-6">
@@ -319,8 +410,6 @@ export default function Pricing() {
         </Card>
       </div>
 
-      {/* Recent Updates (placeholder) */}
-
       {/* Recent Updates */}
       <Card className="card-elevated">
         <CardHeader>
@@ -331,36 +420,8 @@ export default function Pricing() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-orange-500/10 rounded-lg flex items-center justify-center">
-                  <Edit className="w-4 h-4 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Frontend Developer - UAE rate updated</p>
-                  <p className="text-xs text-muted-foreground">Changed from $430 to $450</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm">Admin</p>
-                <p className="text-xs text-muted-foreground">2024-01-15</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-green-500/10 rounded-lg flex items-center justify-center">
-                  <Plus className="w-4 h-4 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">New role added: DevOps Engineer</p>
-                  <p className="text-xs text-muted-foreground">Rates configured for all regions</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm">Sarah Johnson</p>
-                <p className="text-xs text-muted-foreground">2024-01-14</p>
-              </div>
-            </div>
+            {auditLogs.map(renderAuditLog)}
+            {auditLogs.length === 0 && <div className="text-sm text-muted-foreground">No recent updates.</div>}
           </div>
         </CardContent>
       </Card>

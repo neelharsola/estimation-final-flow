@@ -77,9 +77,9 @@ class EstimationSummary(BaseModel):
 
 class EstimationEnvelope(BaseModel):
     schema_version: str = "1.0"
-    project: ProjectInfo
-    rows: List[EstimationRow]
-    summary: EstimationSummary
+    project: Optional[ProjectInfo] = None
+    rows: Optional[List[EstimationRow]] = None
+    summary: Optional[EstimationSummary] = None
 
 
 # Legacy models for backward compatibility
@@ -131,5 +131,8 @@ class Estimation(BaseModel):
     
     # New fields for detailed estimation data
     envelope_data: Optional[EstimationEnvelope] = None
+
+    class Config:
+        extra = "allow"
 
 

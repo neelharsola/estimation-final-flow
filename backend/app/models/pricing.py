@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class PricingRate(BaseModel):
-    id: Optional[str] = Field(default=None, serialization_alias="_id")
+    id: Optional[str] = Field(default=None, validation_alias="_id", serialization_alias="_id")
     role: str
     region: str
     day_rate: float
@@ -36,7 +36,7 @@ class PricingCalcResponse(BaseModel):
 
 
 class ProjectSummary(BaseModel):
-    id: str = Field(serialization_alias="_id")
+    id: str = Field(validation_alias="_id", serialization_alias="_id")
     title: str
     client: str
     created_at: datetime

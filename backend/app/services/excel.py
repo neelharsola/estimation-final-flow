@@ -75,8 +75,8 @@ class ExcelService:
 
             try:
                 logger.info(f"Running Excel generation command: {' '.join(str(c) for c in cmd)}")
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
+                process = await asyncio.create_subprocess_shell(
+                    ' '.join(cmd),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
@@ -149,8 +149,8 @@ class ExcelService:
             ]
             
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
+                process = await asyncio.create_subprocess_shell(
+                    ' '.join(cmd),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )

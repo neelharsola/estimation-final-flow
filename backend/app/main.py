@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, Response
 
 from app.core.config import get_settings, setup_logging
 from app.db.mongo import close_mongo, ensure_indexes, init_mongo
-from app.routes import auth, estimates, users
+from app.routes import auth, estimates, users, audit
 from app.routers import estimates as cli_estimates_router
 from app.routes.estimations import router as estimations_router
 from app.routes.pricing import router as pricing_router
@@ -132,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(estimates.router)
     app.include_router(users.router)
+    app.include_router(audit.router, prefix="/api")
     app.include_router(cli_estimates_router.router)
     
     # Legacy routers (for backwards compatibility)

@@ -135,6 +135,9 @@ export const api = {
       updateSummary: (estimationId: string, summary: any) => request(`/pricing/projects/${estimationId}/summary`, { method: "PUT", body: JSON.stringify(summary) }),
     },
   },
+  audit: {
+    list: () => request("/api/audit"),
+  },
   tools: {
     processEstimation: async (jsonFile: File) => {
       const token = localStorage.getItem("access_token");

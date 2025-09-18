@@ -13,6 +13,7 @@ from app.core.security import get_current_user_id
 from app.db.mongo import get_db
 from app.models.pricing import PricingCalcRequest, PricingCalcResponse, PricingRate, ProjectSummary, ProjectResourcePricing, PricingSummary
 from app.services.pricing import calculate_pricing
+from app.services.audit import log_action
 
 
 router = APIRouter()
@@ -37,37 +38,76 @@ async def list_rates(role: str = Depends(get_current_user_role_dep)) -> List[Pri
 
 
 @router.post("/rates", response_model=PricingRate)
-async def create_rate(payload: PricingRate, role: str = Depends(get_current_user_role_dep)) -> PricingRate:
+async def create_rate(payload: PricingRate, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> PricingRate:
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     db = get_db()
     doc = payload.model_dump(by_alias=True)
     res = await db.pricing_rates.insert_one(doc)
     doc["_id"] = str(res.inserted_id)
+    
+    await log_action(
+        user_id=user_id,
+        action="CREATE_RATE",
+        resource_id=str(res.inserted_id),
+        metadata={"role": payload.role, "day_rate": payload.day_rate, "currency": payload.currency}
+    )
+    
     return PricingRate.model_validate(doc)
 
 
 @router.put("/rates/{rate_id}", response_model=PricingRate)
-async def update_rate(rate_id: str, updates: dict, role: str = Depends(get_current_user_role_dep)) -> PricingRate:
+async def update_rate(rate_id: str, updates: dict, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> PricingRate:
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     db = get_db()
+    import json
+    from bson import json_util
+    
+    original_doc = await db.pricing_rates.find_one({"_id": ObjectId(rate_id)})
+    if not original_doc:
+        raise HTTPException(status_code=404, detail="Not found")
+
     allowed = {"day_rate", "currency", "version", "effective_from"}
     payload = {k: v for k, v in updates.items() if k in allowed}
     await db.pricing_rates.update_one({"_id": ObjectId(rate_id)}, {"$set": payload})
+    
     doc = await db.pricing_rates.find_one({"_id": ObjectId(rate_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
-    doc["_id"] = str(doc["_id"])  # serialize
+        
+    await log_action(
+        user_id=user_id,
+        action="UPDATE_RATE",
+        resource_id=rate_id,
+        metadata=json.loads(json_util.dumps({"old": original_doc, "new": payload}))
+    )
+    
+    doc["_id"] = str(doc["_id"])
     return PricingRate.model_validate(doc)
 
 
 @router.delete("/rates/{rate_id}")
-async def delete_rate(rate_id: str, role: str = Depends(get_current_user_role_dep)) -> dict:
+async def delete_rate(rate_id: str, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> dict:
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     db = get_db()
+    import json
+    from bson import json_util
+    
+    original_doc = await db.pricing_rates.find_one({"_id": ObjectId(rate_id)})
+    if not original_doc:
+        raise HTTPException(status_code=404, detail="Not found")
+
     await db.pricing_rates.delete_one({"_id": ObjectId(rate_id)})
+    
+    await log_action(
+        user_id=user_id,
+        action="DELETE_RATE",
+        resource_id=rate_id,
+        metadata=json.loads(json_util.dumps({"deleted_rate": original_doc}))
+    )
+    
     return {"status": "ok"}
 
 
@@ -149,15 +189,19 @@ async def get_project_resources(estimation_id: str, role: str = Depends(get_curr
 
 
 @router.put("/projects/{estimation_id}/resources", response_model=List[ProjectResourcePricing])
-async def update_project_resources(estimation_id: str, updates: List[ProjectResourcePricing], role: str = Depends(get_current_user_role_dep)) -> List[ProjectResourcePricing]:
+async def update_project_resources(estimation_id: str, updates: List[ProjectResourcePricing], user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> List[ProjectResourcePricing]:
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     from bson import ObjectId
+    import json
+    from bson import json_util
     db = get_db()
     
     est_doc = await db.estimations.find_one({"_id": ObjectId(estimation_id)})
     if not est_doc:
         raise HTTPException(status_code=404, detail="Estimation not found")
+
+    original_resources = est_doc.get("current_version", {}).get("resources", [])
 
     update_map = {item.role: item for item in updates}
     
@@ -173,6 +217,13 @@ async def update_project_resources(estimation_id: str, updates: List[ProjectReso
     await db.estimations.update_one(
         {"_id": ObjectId(estimation_id)},
         {"$set": {"current_version.resources": current_resources, "updated_at": datetime.utcnow()}}
+    )
+    
+    await log_action(
+        user_id=user_id,
+        action="UPDATE_PROJECT_RESOURCES",
+        resource_id=estimation_id,
+        metadata=json.loads(json_util.dumps({"old": original_resources, "new": current_resources}))
     )
     
     # Return the updated resources
