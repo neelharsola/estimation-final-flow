@@ -50,3 +50,13 @@ class ProjectResourcePricing(BaseModel):
     region: str = "default"
 
 
+
+class PricingSummary(BaseModel):
+    currency: str = "USD"
+    subtotal: float = 0.0
+    discount_pct: float = 0.0
+    contingency_pct: float = 0.0
+    final_total: float = 0.0
+    total_hours: float = 0.0
+    # optional per-role breakdown snapshot
+    items: list[PricingBreakdownItem] | None = None

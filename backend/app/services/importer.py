@@ -183,11 +183,21 @@ def build_estimation_from_envelope(envelope: Dict[str, Any], creator_id: str) ->
         except Exception:
             continue
 
+    from app.models.estimation import ResourceAllocation
+
+    parsed_resources: List[ResourceAllocation] = []
+    for r_data in envelope.get("resources", []):
+        try:
+            # Assuming r_data is a dict that matches ResourceAllocation fields
+            parsed_resources.append(ResourceAllocation.model_validate(r_data))
+        except Exception:
+            continue
+
     now = datetime.utcnow()
     current_version = EstimationVersion(
         version_number=1,
         features=features,
-        resources=[],
+        resources=parsed_resources,
         created_by=creator_id,
         created_at=now,
         notes=None,

@@ -131,6 +131,8 @@ export const api = {
       list: () => request("/pricing/projects"),
       resources: (estimationId: string) => request(`/pricing/projects/${estimationId}/resources`),
       updateResources: (estimationId: string, rows: any[]) => request(`/pricing/projects/${estimationId}/resources`, { method: "PUT", body: JSON.stringify(rows) }),
+      getSummary: (estimationId: string) => request(`/pricing/projects/${estimationId}/summary`),
+      updateSummary: (estimationId: string, summary: any) => request(`/pricing/projects/${estimationId}/summary`, { method: "PUT", body: JSON.stringify(summary) }),
     },
   },
   tools: {

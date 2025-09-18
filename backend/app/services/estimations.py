@@ -24,6 +24,8 @@ def _oid(id_str: str) -> ObjectId | None:
 async def create_estimation(est: Estimation) -> Estimation:
     db = get_db()
     doc = est.model_dump(by_alias=True)
+    if doc.get("_id") is None:
+        del doc["_id"]
     res = await db.estimations.insert_one(doc)
     doc["_id"] = str(res.inserted_id)
     return Estimation.model_validate(doc)

@@ -58,8 +58,7 @@ async def get_all(user_id: str = Depends(get_current_user_id), role: str = Depen
 
 @router.post("/", response_model=Estimation)
 async def create(payload: Estimation, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> Estimation:
-    if role == "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin is read-only for estimations")
+    
     now = datetime.utcnow()
     payload.created_at = now
     payload.updated_at = now
@@ -116,8 +115,8 @@ async def remove(estimation_id: str, role: str = Depends(get_current_user_role_d
 
 @router.put("/{estimation_id}/features", response_model=Estimation)
 async def set_features(estimation_id: str, features: List[Feature], role: str = Depends(get_current_user_role_dep)) -> Estimation:
-    if role not in ("estimator", "ops"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can modify features")
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator, ops or admin can modify features")
     est = await update_features(estimation_id, features)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -141,10 +140,38 @@ async def import_envelope(payload: dict, user_id: str = Depends(get_current_user
     Returns the created estimation id.
     """
     from app.services.importer import build_estimation_from_envelope
+    from pymongo.errors import DuplicateKeyError
+    from app.db.mongo import get_db
+    from datetime import datetime
+
     est = build_estimation_from_envelope(payload, creator_id=user_id)
-    created = await create_estimation(est)
-    # Ensure id is present for the response
-    return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
+    db = get_db()
+
+    # Try to find an existing temporary estimation with the same title
+    existing_temp = await db.estimations.find_one({
+        "title": est.title,
+        "is_temporary": True
+    })
+
+    if existing_temp:
+        # Overwrite the existing temporary estimation
+        existing_id = existing_temp["_id"]
+        update_doc = est.model_dump(by_alias=True)
+        if "_id" in update_doc:
+            del update_doc["_id"]  # Don't try to update the _id
+        
+        await db.estimations.update_one({"_id": existing_id}, {"$set": update_doc})
+        return {"estimation_id": str(existing_id), "temporary": True}
+    else:
+        # No existing temporary one, so try to create a new one
+        try:
+            created = await create_estimation(est)
+            return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
+        except DuplicateKeyError:
+            # A finalized estimation with this title exists. Append suffix and retry.
+            est.title = f"{est.title} - Copy {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            created = await create_estimation(est)
+            return {"estimation_id": created.id or getattr(created, "_id", None), "temporary": True}
 
 
 @router.post("/{estimation_id}/finalize")
@@ -382,8 +409,8 @@ async def set_envelope(
 
 @router.post("/{estimation_id}/versions", response_model=Estimation)
 async def create_version(estimation_id: str, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> Estimation:
-    if role not in ("estimator", "ops"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can snapshot versions")
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator, ops or admin can snapshot versions")
     est = await snapshot_version(estimation_id, user_id)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -397,8 +424,8 @@ async def versions(estimation_id: str) -> List[EstimationVersion]:
 
 @router.post("/{estimation_id}/versions/{version_number}/rollback", response_model=Estimation)
 async def rollback(estimation_id: str, version_number: int, role: str = Depends(get_current_user_role_dep)) -> Estimation:
-    if role not in ("estimator", "ops"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator or ops can rollback versions")
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimator, ops or admin can rollback versions")
     est = await rollback_version(estimation_id, version_number)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")

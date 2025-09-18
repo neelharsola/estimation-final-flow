@@ -39,18 +39,18 @@ class EstimationRow(BaseModel):
     reuse_source: Optional[str] = None
     complexity: Literal["Simple", "Average", "Complex"]
     previous_project_actual: Optional[PreviousProjectActual] = None
-    hours: Hours
+    hours: Hours = Hours()
     num_components: int
     source_refs: List[SourceRef] = []
     assumptions: List[str] = []
     risks: List[str] = []
     dependencies: List[str] = []
     assumed: bool = True
-    total_hours: float
+    total_hours: float = 0
     contingency_pct: float = 0.1
-    total_hours_with_contingency: float
-    single_resource_duration_days: int
-    single_resource_duration_months: float
+    total_hours_with_contingency: float = 0
+    single_resource_duration_days: int = 0
+    single_resource_duration_months: float = 0
 
 
 class Estimator(BaseModel):
@@ -95,6 +95,8 @@ class ResourceAllocation(BaseModel):
     count: int
     days: int
     allocation_type: Literal["ft", "pt"]
+    day_rate: Optional[float] = None
+    currency: Optional[str] = None
 
 
 class ReviewRecord(BaseModel):

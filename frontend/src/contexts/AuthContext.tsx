@@ -36,9 +36,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const normalizedRole = (userData?.role || "").toLowerCase();
       const normalized = { ...userData, role: normalizedRole } as User;
       setUser(normalized);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch user:', error);
-      // Do not clear tokens on transient errors; keep session
+      // If error is 401, token is invalid, so clear it.
+      if (error?.status === 401) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      }
       setUser(null);
     } finally {
       setLoading(false);

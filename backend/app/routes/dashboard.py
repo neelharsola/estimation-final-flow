@@ -12,7 +12,7 @@ router = APIRouter()
 
 async def _counts_for(user_id: str | None, role: str | None) -> dict:
     db = get_db()
-    base_filter = {}
+    base_filter = {"$or": [{"is_temporary": {"$exists": False}}, {"is_temporary": False}]}
     if role == "estimator" and user_id:
         try:
             base_filter["creator_id"] = user_id

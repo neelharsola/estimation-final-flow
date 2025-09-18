@@ -91,7 +91,9 @@ const steps = [
   { id: 1, title: "Import JSON", icon: FileText },
   { id: 2, title: "Review & Export", icon: Calculator },
   { id: 3, title: "Upload Excel", icon: FileText },
-  { id: 4, title: "Resources & Finalize", icon: Users },
+  { id: 4, title: "Resources", icon: Users },
+  { id: 5, title: "Pricing", icon: Calculator },
+  { id: 6, title: "Final Pricing", icon: Settings },
 ];
 
 interface EstimationStepperProps {
@@ -116,14 +118,21 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   const [estimationId, setEstimationId] = useState<string | null>(null);
   const [finalized, setFinalized] = useState<boolean>(false);
   const [resources, setResources] = useState<Array<{ role: string; count: number; days: number }>>([]);
+  const [pricingRows, setPricingRows] = useState<Array<{ role: string; days: number; count: number; hourlyRate: number; dayRate: number; totalCost: number }>>([]);
+  const [discountPct, setDiscountPct] = useState<number>(0);
+  const [contingencyPct, setContingencyPct] = useState<number>(0);
   const [allResources, setAllResources] = useState<any[]>([]);
+  const [fx, setFx] = useState<{ base: string; rates: Record<string, number> }>({ base: "USD", rates: { AED: 3.6725, INR: 87.78, GBP: 0.73, USD: 1 } });
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  
+  // Debug logging
+  console.log("Current user:", user, "isAdmin:", isAdmin);
   const [newResOpen, setNewResOpen] = useState(false);
   const [newResRole, setNewResRole] = useState("");
   const [newResRates, setNewResRates] = useState<{ AED?: number; INR?: number; USD?: number; POUND?: number }>({ AED: 0, INR: 0, USD: 0, POUND: 0 });
 
   // persist helper
-  const persistEnvelope = useCallback(async (data: EstimationData): Promise<string> => {
+  const persistEnvelope = useCallback(async (data: EstimationData, resources?: any[]): Promise<string> => {
     try {
       const envelope = {
         schema_version: data.schema_version,
@@ -131,7 +140,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           name: data.project.name,
           client: data.project.client,
           description: data.project.description || "",
-          estimator: { name: user?.name || "Unknown", id: 1 },
+          estimator: { name: user?.name || "Unknown", id: user?.id || "1" },
         },
         rows: data.rows.map(r => ({
           row_id: r.row_id,
@@ -144,6 +153,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           complexity: r.complexity,
           num_components: r.num_components,
         })),
+        resources: resources || [],
       };
       if (!estimationId) {
         const res = await api.estimations.importEnvelope(envelope);
@@ -197,7 +207,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
         };
         setEstimationData(nextData);
         // create estimation immediately and await id
-        try { await persistEnvelope(nextData); } catch {}
+        // Persisting on upload is disabled by user request.
 
         sonnerToast.success("JSON uploaded successfully! Form has been populated.");
         
@@ -235,8 +245,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       ...prev,
         rows: prev.rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
       };
-      // persist after local update
-      persistEnvelope(next);
+      // Persisting on row update is disabled by user request.
       return next;
     });
   };
@@ -256,12 +265,28 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
 
     setIsProcessing(true);
     try {
-      // Ensure envelope persisted / created
-      const id = await persistEnvelope(estimationData);
-      if (!id) throw new Error("Failed to create estimation");
-      // Generate Excel from latest envelope
-      const excelBlob = await api.estimations.generateExcel(id);
-      
+      const envelope = {
+        schema_version: estimationData.schema_version,
+        project: {
+          name: estimationData.project.name,
+          client: estimationData.project.client,
+          description: estimationData.project.description || "",
+          estimator: { name: user?.name || "Unknown", id: user?.id || "1" },
+        },
+        rows: estimationData.rows,
+        summary: {
+          row_count: 0,
+          total_hours: 0,
+          total_hours_with_contingency: 0,
+          single_resource_duration_days: 0,
+          single_resource_duration_months: 0,
+          notes: [],
+        }
+      };
+      const jsonString = JSON.stringify(envelope, null, 2);
+      const jsonFile = new File([jsonString], "estimation.json", { type: "application/json" });
+      const excelBlob = await api.tools.processEstimation(jsonFile);
+
       // Download the processed Excel file
       const url = URL.createObjectURL(excelBlob);
       const a = document.createElement("a");
@@ -270,21 +295,11 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       a.click();
       URL.revokeObjectURL(url);
 
-      sonnerToast.success("Excel generated from latest envelope.");
-      
-      // keep dialog open to continue to next steps; do not emit completion until finalize
+      sonnerToast.success("Excel generated successfully.");
     } catch (error: any) {
       console.error("Processing error:", error);
       const message = error?.message || "Failed to process estimation. Please try again.";
       sonnerToast.error(message);
-      // cleanup temporary draft on failure
-      try {
-        if (estimationId) {
-          await api.estimations.delete(estimationId);
-          setEstimationId(null);
-        }
-      } catch {}
-      // no dummy emission on failure
     } finally {
       setIsProcessing(false);
     }
@@ -293,16 +308,20 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   const finalize = async () => {
     if (finalized) return;
     try {
-      const id = estimationId || await persistEnvelope(estimationData);
-      if (!id) throw new Error("Failed to create estimation");
-      // Save resources one more time before finalize if present
-      if (resources && resources.length > 0) {
-        await api.estimations.setResources(id, resources as any);
+      // Pass resources to persistEnvelope to create/update atomically
+      const id = await persistEnvelope(estimationData, resources);
+      if (!id) {
+        throw new Error("Failed to create estimation");
       }
+      
+      // Finalize the estimation
       await api.estimations.finalize(id);
+      
       setFinalized(true);
-      sonnerToast.success("Estimation finalized");
-      if (onComplete) onComplete({ id, projectTitle: estimationData.project.name, clientName: estimationData.project.client });
+      sonnerToast.success("Estimation finalized and saved successfully!");
+      if (onComplete) {
+        onComplete({ id, projectTitle: estimationData.project.name, clientName: estimationData.project.client });
+      }
       onOpenChange(false);
     } catch (e: any) {
       sonnerToast.error(e?.message || "Failed to finalize estimation");
@@ -311,8 +330,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
 
   const onUploadExcel = async (file: File) => {
     try {
-      const id = estimationId || await persistEnvelope(estimationData);
-      const result = await api.estimations.uploadExcel(id, file);
+      let id = estimationId;
+      if (!id) {
+        id = await persistEnvelope(estimationData, resources);
+        setEstimationId(id);
+      }
+      const result = await api.estimations.uploadExcel(id as string, file);
       const { matched, updated, unmatched, rows, resources: parsedResources } = result || { matched: 0, updated: 0, unmatched: 0, rows: [], resources: [] };
       if (Array.isArray(rows) && rows.length > 0) {
         setEstimationData(prev => {
@@ -334,12 +357,14 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             }
           });
           const updatedData = { ...prev, rows: nextRows };
-          persistEnvelope(updatedData);
+          // Persisting on excel upload is disabled by user request.
           return updatedData;
         });
       }
       if (Array.isArray(parsedResources) && parsedResources.length > 0) {
-        setResources(parsedResources.map((r: any) => ({ role: r.role, count: r.count, days: r.days, allocation_type: r.allocation_type || "pt" })));
+        const nextRes = parsedResources.map((r: any) => ({ role: r.role, count: r.count, days: r.days }));
+        setResources(nextRes);
+        setPricingRows(nextRes.map((r: any) => ({ role: r.role, days: Number(r.days) || 0, count: Number(r.count) || 0, hourlyRate: 0, dayRate: 0, totalCost: 0 })));
       }
       sonnerToast.success(`Excel uploaded. Matched: ${matched}, Updated: ${updated}, Unmatched: ${unmatched}`);
     } catch (e: any) {
@@ -350,6 +375,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   useEffect(() => {
     (async () => {
       try { const list = await api.resources.list(); setAllResources(list || []); } catch {}
+      try { const data = await api.pricing.fx("USD", "AED,INR,GBP,USD"); if (data?.rates) setFx({ base: data.base, rates: data.rates }); } catch {}
     })();
   }, []);
 
@@ -637,7 +663,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       case 4:
         return (
           <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Resources & Finalize</h3>
+            <h3 className="text-lg font-semibold">Resources</h3>
             <Card className="p-4">
               <h4 className="font-medium mb-4">General Resources</h4>
               <div className="overflow-x-auto">
@@ -648,14 +674,13 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                       <TableHead>Resources</TableHead>
                       <TableHead>Days</TableHead>
                       <TableHead>No. of Resources</TableHead>
-                      <TableHead>Allocation</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {resources.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6}>
+                        <TableCell colSpan={5}>
                           <p className="text-sm text-muted-foreground">Upload Excel or add resources.</p>
                         </TableCell>
                       </TableRow>
@@ -664,13 +689,17 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                         <TableCell>{idx + 1}</TableCell>
                         <TableCell>
                           <Select value={r.role} onValueChange={(val) => {
-                            if (val === "__modal__") { setNewResOpen(true); return; }
+                            if (val === "__modal__") { 
+                              console.log("Opening new resource dialog"); 
+                              setNewResOpen(true); 
+                              return; 
+                            }
                             setResources(prev => prev.map((row, i) => i === idx ? { ...row, role: val } : row))
                           }}>
                             <SelectTrigger><SelectValue placeholder="Select resource" /></SelectTrigger>
                             <SelectContent>
                               {allResources.map((ar: any) => (
-                                <SelectItem key={ar.id || ar._id} value={ar.role}>{ar.role} — {ar.name}</SelectItem>
+                                <SelectItem key={ar.id || ar._id} value={ar.role}>{ar.role}</SelectItem>
                               ))}
                               {isAdmin && <SelectItem value="__modal__">+ Add new resource…</SelectItem>}
                             </SelectContent>
@@ -682,15 +711,6 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                         <TableCell>
                           <Input type="number" min="0" value={r.count} onChange={(e) => setResources(prev => prev.map((row, i) => i === idx ? { ...row, count: Number(e.target.value) } : row))} className="w-24" />
                         </TableCell>
-                        <TableCell>
-                          <Select value={(r as any).allocation_type || "pt"} onValueChange={(val) => setResources(prev => prev.map((row, i) => i === idx ? { ...row, allocation_type: val as any } : row))}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pt">Part time</SelectItem>
-                              <SelectItem value="ft">Full time</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => setResources(prev => prev.filter((_, i) => i !== idx))}>Remove</Button>
                         </TableCell>
@@ -699,18 +719,13 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   </TableBody>
                 </Table>
               </div>
-              <div className="flex justify-between mt-4">
-                <Button variant="outline" size="sm" onClick={() => setResources(prev => [...prev, { role: allResources[0]?.role || "AI/ML Developer", count: 1, days: 5, allocation_type: "pt" as any }])}>Add Row</Button>
-                <Button onClick={async () => {
-                  try {
-                    if (!estimationId) await persistEnvelope(estimationData);
-                    const id = (estimationId as string) || "";
-                    await api.estimations.setResources(id, resources as any);
-                    sonnerToast.success("Resources saved.");
-                  } catch (e: any) {
-                    sonnerToast.error(e?.message || "Failed to save resources");
-                  }
-                }}>Save Resources</Button>
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" size="sm" onClick={() => {
+                  const usedRoles = resources.map(r => r.role);
+                  const availableRole = allResources.find(ar => !usedRoles.includes(ar.role));
+                  const newRole = availableRole?.role || allResources[0]?.role || "AI/ML Developer";
+                  setResources(prev => [...prev, { role: newRole, count: 1, days: 5 }]);
+                }}>Add Row</Button>
               </div>
             </Card>
 
@@ -888,6 +903,335 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
           </div>
         );
 
+      case 5:
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Pricing</h3>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  // Add new pricing row with available role
+                  const usedRoles = pricingRows.map(r => r.role);
+                  const availableRoles = allResources.filter(ar => !usedRoles.includes(ar.role));
+                  if (availableRoles.length > 0) {
+                    const newRow = {
+                      role: availableRoles[0].role,
+                      days: 10,
+                      count: 1,
+                      hourlyRate: 0,
+                      dayRate: 0,
+                      totalCost: 0
+                    };
+                    setPricingRows(prev => [...prev, newRow]);
+                  } else {
+                    sonnerToast.error("All available roles are already used.");
+                  }
+                }}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Resource
+              </Button>
+            </div>
+            
+            <Card className="p-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>Count</TableHead>
+                      <TableHead>Hourly Rate (USD)</TableHead>
+                      <TableHead>Day Rate (USD)</TableHead>
+                      <TableHead>Total Cost (USD)</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pricingRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                          No pricing rows added. Click "Add Resource" to start.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pricingRows.map((row, idx) => {
+                        const usedRoles = pricingRows.map((r, i) => i !== idx ? r.role : null).filter(Boolean);
+                        const availableRoles = allResources.filter(ar => !usedRoles.includes(ar.role));
+                        // Get all roles that can be shown for this dropdown (current role + available roles)
+                        const allSelectableRoles = allResources.filter(ar => 
+                          ar.role === row.role || !usedRoles.includes(ar.role)
+                        );
+                        
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell className="min-w-[200px]">
+                              <Select 
+                                value={row.role} 
+                                onValueChange={(newRole) => {
+                                  if (newRole === "__modal__") { 
+                                    console.log("Opening new resource dialog from pricing"); 
+                                    setNewResOpen(true); 
+                                    return; 
+                                  }
+                                  setPricingRows(prev => prev.map((r, i) => 
+                                    i === idx ? { ...r, role: newRole } : r
+                                  ));
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {/* All selectable roles (no duplicates) */}
+                                  {allSelectableRoles.map(ar => (
+                                    <SelectItem key={ar.id || ar._id} value={ar.role}>
+                                      {ar.role}
+                                    </SelectItem>
+                                  ))}
+                                  {isAdmin && <SelectItem value="__modal__">+ Add new resource…</SelectItem>}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                step="0.5"
+                                value={row.days}
+                                onChange={(e) => {
+                                  const days = Number(e.target.value) || 0;
+                                  setPricingRows(prev => prev.map((r, i) => 
+                                    i === idx ? { 
+                                      ...r, 
+                                      days, 
+                                      totalCost: r.dayRate * days * r.count 
+                                    } : r
+                                  ));
+                                }}
+                                className="w-20" 
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                value={row.count}
+                                onChange={(e) => {
+                                  const count = Number(e.target.value) || 0;
+                                  setPricingRows(prev => prev.map((r, i) => 
+                                    i === idx ? { 
+                                      ...r, 
+                                      count, 
+                                      totalCost: r.dayRate * r.days * count 
+                                    } : r
+                                  ));
+                                }}
+                                className="w-20" 
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                step="0.01"
+                                value={row.hourlyRate}
+                                onChange={(e) => {
+                                  const hourlyRate = Number(e.target.value) || 0;
+                                  const dayRate = hourlyRate * 8; // 8 hours per day
+                                  setPricingRows(prev => prev.map((r, i) => 
+                                    i === idx ? { 
+                                      ...r, 
+                                      hourlyRate, 
+                                      dayRate, 
+                                      totalCost: dayRate * r.days * r.count 
+                                    } : r
+                                  ));
+                                }}
+                                className="w-28" 
+                                placeholder="0.00"
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              ${row.dayRate.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="font-medium text-green-600">
+                              ${row.totalCost.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setPricingRows(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Add summary section */}
+              {pricingRows.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <Card className="p-3">
+                    <h5 className="font-medium mb-2">Currency Rates</h5>
+                    <div className="text-sm space-y-1">
+                      <div className="flex justify-between"><span>AED</span><span>1 USD = {fx.rates.AED ?? 3.6725}</span></div>
+                      <div className="flex justify-between"><span>INR</span><span>1 USD = {fx.rates.INR ?? 87.78}</span></div>
+                      <div className="flex justify-between"><span>GBP</span><span>1 USD = {fx.rates.GBP ?? 0.73}</span></div>
+                    </div>
+                  </Card>
+                  <Card className="p-3">
+                    <h5 className="font-medium mb-2">Project Totals</h5>
+                    <div className="text-sm space-y-1">
+                      {(() => {
+                        const subtotal = pricingRows.reduce((acc, r) => acc + r.totalCost, 0);
+                        const totalHours = pricingRows.reduce((acc, r) => acc + (r.days * 8 * r.count), 0);
+                        const totalDays = pricingRows.reduce((acc, r) => acc + (r.days * r.count), 0);
+                        return (
+                          <>
+                            <div className="flex justify-between"><span>Total Hours</span><span>{totalHours}</span></div>
+                            <div className="flex justify-between"><span>Total Days</span><span>{totalDays}</span></div>
+                            <div className="flex justify-between font-semibold text-green-600"><span>Subtotal (USD)</span><span>${subtotal.toFixed(2)}</span></div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </Card>
+                  <Card className="p-3">
+                    <h5 className="font-medium mb-2">Other Currencies</h5>
+                    <div className="text-sm space-y-1">
+                      {(() => {
+                        const subtotal = pricingRows.reduce((acc, r) => acc + r.totalCost, 0);
+                        return (
+                          <>
+                            <div className="flex justify-between"><span>AED</span><span>{(subtotal * (fx.rates.AED || 3.6725)).toFixed(2)}</span></div>
+                            <div className="flex justify-between"><span>INR</span><span>{(subtotal * (fx.rates.INR || 87.78)).toFixed(2)}</span></div>
+                            <div className="flex justify-between"><span>GBP</span><span>{(subtotal * (fx.rates.GBP || 0.73)).toFixed(2)}</span></div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </Card>
+          </div>
+        );
+
+      case 6:
+        {
+          const rows = pricingRows.length ? pricingRows : resources.map(r => ({ role: r.role, days: r.days, count: r.count, hourlyRate: 0, dayRate: 0, totalCost: 0 }));
+          const subtotal = rows.reduce((acc, r) => acc + (r.totalCost || 0), 0);
+          const discountAmt = subtotal * (discountPct / 100);
+          const afterDiscount = subtotal - discountAmt;
+          const contingencyAmt = afterDiscount * (contingencyPct / 100);
+          const finalTotal = afterDiscount + contingencyAmt;
+          const totalHours = rows.reduce((acc, r) => acc + (r.days * 8 * r.count), 0);
+          return (
+            <div className="space-y-6">
+              <h3 className="text-lg font-semibold">Final Pricing</h3>
+              <Card className="p-4">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Count</TableHead>
+                        <TableHead>Hourly Rate</TableHead>
+                        <TableHead>Day Rate</TableHead>
+                        <TableHead>Total Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{r.role}</TableCell>
+                          <TableCell>{r.days}</TableCell>
+                          <TableCell>{r.count}</TableCell>
+                          <TableCell>{(r.hourlyRate || 0).toFixed(2)}</TableCell>
+                          <TableCell>{(r.dayRate || 0).toFixed(2)}</TableCell>
+                          <TableCell>{(r.totalCost || 0).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="p-4">
+                  <h4 className="font-medium mb-2">Adjustments</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Discount (%)</Label>
+                      <Input type="number" min="0" value={discountPct} onChange={(e) => setDiscountPct(Number(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label>Contingency (%)</Label>
+                      <Input type="number" min="0" value={contingencyPct} onChange={(e) => setContingencyPct(Number(e.target.value) || 0)} />
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <h4 className="font-medium mb-2">Summary</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Total Hours</span><span>{totalHours}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>-{discountAmt.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Contingency</span><span>+{contingencyAmt.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-semibold"><span>Final Total</span><span>{finalTotal.toFixed(2)}</span></div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <h4 className="font-medium mb-2">In Other Currencies</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between"><span>AED</span><span>{(finalTotal * (fx.rates.AED || 3.6725)).toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span>INR</span><span>{(finalTotal * (fx.rates.INR || 87.78)).toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span>GBP</span><span>{(finalTotal * (fx.rates.GBP || 0.73)).toFixed(2)}</span></div>
+                  </div>
+                </Card>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={async () => {
+                  try {
+                    const id = estimationId || await persistEnvelope(estimationData, resources);
+                    const rows = pricingRows.length ? pricingRows : resources.map(r => ({ role: r.role, days: r.days, count: r.count, hourlyRate: 0, dayRate: 0, totalCost: 0 }));
+                    if (id) {
+                      await api.pricing.projects.updateResources(id, rows.map(r => ({ role: r.role, day_rate: r.dayRate, currency: "USD", region: "default" })));
+                      await api.pricing.projects.updateSummary(id, {
+                        currency: "USD",
+                        subtotal,
+                        discount_pct: discountPct,
+                        contingency_pct: contingencyPct,
+                        final_total: finalTotal,
+                        total_hours: totalHours,
+                        items: rows.map(r => ({ role: r.role, region: "default", days: r.days * r.count, rate: r.dayRate, currency: "USD", cost: r.totalCost }))
+                      });
+                    }
+                    await finalize();
+                  } catch (e) {
+                    sonnerToast.error("Failed to save pricing");
+                  }
+                }} className="gap-2" disabled={finalized}>
+                  <CheckCircle className="w-4 h-4" />
+                  {finalized ? "Finalized" : "Finalize Estimation"}
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
       default:
         return null;
     }
@@ -906,7 +1250,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       }
       onOpenChange(v);
     }}>
-      <UIDialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <UIDialogContent className="max-w-[1320px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-primary" />
@@ -963,18 +1307,27 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
               <ChevronLeft className="w-4 h-4" />
               Previous
             </Button>
-            {currentStep < steps.length ? (
+            {currentStep < steps.length && (
               <Button
-                onClick={() => setCurrentStep(prev => Math.min(steps.length, prev + 1))}
+                onClick={() => {
+                  const nextStep = Math.min(steps.length, currentStep + 1);
+                  // Auto-initialize pricing rows from resources when entering step 5
+                  if (nextStep === 5 && pricingRows.length === 0 && resources.length > 0) {
+                    setPricingRows(resources.map(r => ({
+                      role: r.role,
+                      days: r.days,
+                      count: r.count,
+                      hourlyRate: 0,
+                      dayRate: 0,
+                      totalCost: 0
+                    })));
+                  }
+                  setCurrentStep(nextStep);
+                }}
                 className="gap-2"
               >
                 Next
                 <ChevronRight className="w-4 h-4" />
-              </Button>
-            ) : (
-              <Button onClick={finalize} className="gap-2" disabled={finalized}>
-                <CheckCircle className="w-4 h-4" />
-                {finalized ? "Finalized" : "Finalize Estimation"}
               </Button>
             )}
           </div>
@@ -999,7 +1352,21 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             
             {currentStep < steps.length ? (
               <Button
-                onClick={() => setCurrentStep(prev => Math.min(steps.length, prev + 1))}
+                onClick={() => {
+                  const nextStep = Math.min(steps.length, currentStep + 1);
+                  // Auto-initialize pricing rows from resources when entering step 5
+                  if (nextStep === 5 && pricingRows.length === 0 && resources.length > 0) {
+                    setPricingRows(resources.map(r => ({
+                      role: r.role,
+                      days: r.days,
+                      count: r.count,
+                      hourlyRate: 0,
+                      dayRate: 0,
+                      totalCost: 0
+                    })));
+                  }
+                  setCurrentStep(nextStep);
+                }}
                 className="gap-2"
               >
                 Next

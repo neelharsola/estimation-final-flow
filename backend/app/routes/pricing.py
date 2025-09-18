@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from app.core.security import get_current_user_id
 from app.db.mongo import get_db
-from app.models.pricing import PricingCalcRequest, PricingCalcResponse, PricingRate, ProjectSummary, ProjectResourcePricing
+from app.models.pricing import PricingCalcRequest, PricingCalcResponse, PricingRate, ProjectSummary, ProjectResourcePricing, PricingSummary
 from app.services.pricing import calculate_pricing
 
 
@@ -128,11 +128,23 @@ async def get_project_resources(estimation_id: str, role: str = Depends(get_curr
         raise HTTPException(status_code=404, detail="Estimation not found")
     out: list[ProjectResourcePricing] = []
     for res in (est.get("current_version", {}).get("resources") or []):
-        # Fetch latest rate for role
-        rate_doc = await db.pricing_rates.find_one({"role": res.get("role"), "region": "default"}, sort=[("version", -1)])
-        day_rate = float(rate_doc.get("day_rate", 0)) if rate_doc else 0.0
-        currency = rate_doc.get("currency", "USD") if rate_doc else "USD"
-        out.append(ProjectResourcePricing(role=res.get("role", ""), day_rate=day_rate, currency=currency, region=rate_doc.get("region", "default") if rate_doc else "default"))
+        role_name = res.get("role")
+        day_rate = res.get("day_rate")
+        currency = res.get("currency")
+        
+        if day_rate is None or currency is None:
+            # Fallback to global rates
+            rate_doc = await db.pricing_rates.find_one({"role": role_name, "region": "default"}, sort=[("version", -1)])
+            if rate_doc:
+                day_rate = float(rate_doc.get("day_rate", 0)) if day_rate is None else day_rate
+                currency = rate_doc.get("currency", "USD") if currency is None else currency
+
+        out.append(ProjectResourcePricing(
+            role=role_name, 
+            day_rate=float(day_rate or 0), 
+            currency=currency or "USD", 
+            region="default" # region is not stored per resource override, so we assume default
+        ))
     return out
 
 
@@ -142,19 +154,52 @@ async def update_project_resources(estimation_id: str, updates: List[ProjectReso
         raise HTTPException(status_code=403, detail="Admin only")
     from bson import ObjectId
     db = get_db()
-    # Upsert pricing rates versioned per role for region="default"
-    # Simple approach: create a new version with +1 for each role being updated
-    for item in updates:
-        last = await db.pricing_rates.find_one({"role": item.role, "region": item.region}, sort=[("version", -1)])
-        next_version = int(last.get("version", 0)) + 1 if last else 1
-        await db.pricing_rates.insert_one({
-            "role": item.role,
-            "region": item.region or "default",
-            "day_rate": float(item.day_rate),
-            "currency": item.currency or "USD",
-            "version": next_version,
-            "effective_from": datetime.utcnow(),
-        })
-    # Return current effective rates after update
-    return await get_project_resources(estimation_id)
+    
+    est_doc = await db.estimations.find_one({"_id": ObjectId(estimation_id)})
+    if not est_doc:
+        raise HTTPException(status_code=404, detail="Estimation not found")
+
+    update_map = {item.role: item for item in updates}
+    
+    current_resources = est_doc.get("current_version", {}).get("resources", [])
+    
+    for resource in current_resources:
+        role_name = resource.get("role")
+        if role_name in update_map:
+            update_item = update_map[role_name]
+            resource["day_rate"] = float(update_item.day_rate)
+            resource["currency"] = update_item.currency
+            
+    await db.estimations.update_one(
+        {"_id": ObjectId(estimation_id)},
+        {"$set": {"current_version.resources": current_resources, "updated_at": datetime.utcnow()}}
+    )
+    
+    # Return the updated resources
+    return await get_project_resources(estimation_id, role)
+
+
+# New: Save and retrieve per-project pricing summary (USD primary)
+@router.get("/projects/{estimation_id}/summary", response_model=PricingSummary)
+async def get_project_pricing_summary(estimation_id: str, role: str = Depends(get_current_user_role_dep)) -> PricingSummary:
+    from bson import ObjectId
+    db = get_db()
+    doc = await db.estimations.find_one({"_id": ObjectId(estimation_id)}, {"pricing_summary": 1})
+    data = (doc or {}).get("pricing_summary") or {}
+    try:
+        return PricingSummary.model_validate(data)
+    except Exception:
+        return PricingSummary()
+
+
+@router.put("/projects/{estimation_id}/summary", response_model=PricingSummary)
+async def update_project_pricing_summary(estimation_id: str, payload: PricingSummary, role: str = Depends(get_current_user_role_dep)) -> PricingSummary:
+    from bson import ObjectId
+    from datetime import datetime
+    db = get_db()
+    await db.estimations.update_one(
+        {"_id": ObjectId(estimation_id)},
+        {"$set": {"pricing_summary": payload.model_dump(), "updated_at": datetime.utcnow()}},
+    )
+    return await get_project_pricing_summary(estimation_id, role)
 

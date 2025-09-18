@@ -76,26 +76,14 @@ def require_roles(*roles: str):
 # This helper expects a separate dependency to fetch role from DB; defined in routes where DB is available
 async def get_current_user(user_id: str = Depends(get_current_user_id)) -> User:
     """Get current user from database."""
-    from bson import ObjectId
-    db = get_db()
-    
-    try:
-        # Convert string ID to ObjectId for MongoDB query
-        object_id = ObjectId(user_id)
-        doc = await db.users.find_one({"_id": object_id})
-    except Exception:
-        # If ObjectId conversion fails, try as string
-        doc = await db.users.find_one({"_id": user_id})
-    
-    if not doc:
+    from app.services.users import find_user_by_id
+    user = await find_user_by_id(user_id)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            detail="User not found",
         )
-    
-    # Ensure _id is string for model validation
-    doc["_id"] = str(doc["_id"])
-    return User.model_validate(doc)
+    return user
 
 
 def require_role(*allowed_roles: str):
