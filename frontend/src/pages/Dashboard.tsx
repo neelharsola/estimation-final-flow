@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   Calculator, 
   Clock, 
@@ -11,24 +12,41 @@ import {
   TrendingUp, 
   ArrowUpRight,
   Building2,
-  Calendar
+  Calendar,
+  CheckCircle,
+  XCircle,
+  Eye
 } from "lucide-react";
 
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string, approvalStatus?: string) => {
+  // Handle approval-specific statuses
+  if (status === "approved" || approvalStatus === "approved") {
+    return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Approved</Badge>;
+  }
+  if (status === "rejected" || approvalStatus === "rejected") {
+    return <Badge className="bg-red-500/20 text-red-500 border-red-500/30">Rejected</Badge>;
+  }
+  if (status === "pending_approval" || approvalStatus === "pending") {
+    return <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">Pending Approval</Badge>;
+  }
+  
+  // Handle other statuses
   switch (status) {
-    case "approved":
-      return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Approved</Badge>;
-    case "pending_review":
-      return <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30">Pending Review</Badge>;
-    case "in_progress":
-      return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">In Progress</Badge>;
+    case "under_review":
+      return <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30">Under Review</Badge>;
+    case "ready_for_pricing":
+      return <Badge className="bg-purple-500/20 text-purple-500 border-purple-500/30">Ready for Pricing</Badge>;
+    case "draft":
+      return <Badge className="bg-gray-500/20 text-gray-500 border-gray-500/30">Draft</Badge>;
     default:
-      return <Badge variant="secondary">{status}</Badge>;
+      return <Badge variant="secondary">{status.replace('_', ' ')}</Badge>;
   }
 };
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     active_estimations: 0,
     pending_reviews: 0,
@@ -37,6 +55,15 @@ export default function Dashboard() {
   const [recentEstimations, setRecentEstimations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  
+  // Redirect admins to AdminDashboard
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/admin-dashboard');
+    }
+  }, [isAdmin, navigate]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -56,6 +83,9 @@ export default function Dashboard() {
           client: estimation.client || 'Unknown Client',
           project: estimation.title || 'Untitled Project',
           status: estimation.status || 'draft',
+          approval_status: estimation.approval_status,
+          creator_id: estimation.creator_id,
+          estimator_name: estimation.estimator_name,
           created_at: estimation.created_at,
           updated_at: estimation.updated_at
         }));
@@ -151,16 +181,70 @@ export default function Dashboard() {
                       <div>
                         <p className="font-medium text-sm">{estimation.project}</p>
                         <p className="text-xs text-muted-foreground">{estimation.client}</p>
+                        {estimation.estimator_name && (
+                          <p className="text-xs text-muted-foreground">by {estimation.estimator_name}</p>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      {getStatusBadge(estimation.status)}
-                      <div className="flex items-center gap-1 mt-1">
-                        <Calendar className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">
-                          {estimation.updated_at ? new Date(estimation.updated_at).toLocaleDateString() : 'No date'}
-                        </span>
+                    <div className="text-right flex items-center gap-2">
+                      <div>
+                        {getStatusBadge(estimation.status, estimation.approval_status)}
+                        <div className="flex items-center gap-1 mt-1">
+                          <Calendar className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            {estimation.updated_at ? new Date(estimation.updated_at).toLocaleDateString() : 'No date'}
+                          </span>
+                        </div>
                       </div>
+                      
+                      {/* Admin actions for pending approval estimations */}
+                      {isAdmin && (estimation.status === 'pending_approval' || estimation.approval_status === 'pending') && estimation.creator_id !== user?.id && (
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => navigate(`/pricing?estimation=${estimation.id}`)}
+                            className="h-8 w-8 p-0"
+                            title="Review & Price"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={async () => {
+                              try {
+                                await api.estimations.approve(estimation.id, 'Approved from dashboard');
+                                // Refresh the list
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('Failed to approve:', error);
+                              }
+                            }}
+                            className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            title="Approve"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={async () => {
+                              try {
+                                await api.estimations.reject(estimation.id, 'Rejected from dashboard');
+                                // Refresh the list
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('Failed to reject:', error);
+                              }
+                            }}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Reject"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

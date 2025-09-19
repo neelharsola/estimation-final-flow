@@ -64,6 +64,11 @@ async def ensure_indexes() -> None:
         await _db.estimations.create_index("title", unique=True)
         await _db.pricing_rates.create_index([("role", 1), ("region", 1), ("version", -1)])
         
+        # Pricing resources indexes
+        await _db.pricing_resources.create_index("estimation_id")
+        await _db.pricing_resources.create_index([("estimation_id", 1), ("role", 1)], unique=True)
+        await _db.pricing_resources.create_index("created_at")
+        
         print("Database indexes created successfully")
         
     except Exception as e:

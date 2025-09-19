@@ -104,6 +104,11 @@ export const api = {
     },
     populateFromExcel: (id: string, payload: any) => request(`/estimations/${id}/populate-from-excel`, { method: "POST", body: JSON.stringify(payload) }),
     setResources: (id: string, resources: any[]) => request(`/estimations/${id}/resources`, { method: "PUT", body: JSON.stringify(resources) }),
+    submitForApproval: (id: string) => request(`/estimations/${id}/submit-approval`, { method: "POST" }),
+    approve: (id: string, comment?: string) => request(`/estimations/${id}/approve`, { method: "POST", body: JSON.stringify({ comment: comment || "" }) }),
+    reject: (id: string, comment?: string) => request(`/estimations/${id}/reject`, { method: "POST", body: JSON.stringify({ comment: comment || "" }) }),
+    updatePricingResources: (id: string, resources: any[]) => request(`/estimations/${id}/pricing-resources`, { method: "PUT", body: JSON.stringify(resources) }),
+    getPricingResources: (id: string) => request(`/estimations/${id}/pricing-resources`),
   },
   users: {
     list: () => request("/api/v1/users"),

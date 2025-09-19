@@ -120,7 +120,7 @@ class Estimation(BaseModel):
     title: str
     client: str
     description: Optional[str] = None
-    status: Literal["draft", "under_review", "ready_for_pricing"]
+    status: Literal["draft", "under_review", "ready_for_pricing", "pending_approval", "approved", "rejected"]
     creator_id: str
     is_temporary: bool = False
     current_version: EstimationVersion
@@ -128,6 +128,12 @@ class Estimation(BaseModel):
     review_records: List[ReviewRecord]
     created_at: datetime
     updated_at: datetime
+    
+    # Approval workflow fields
+    approval_status: Optional[Literal["pending", "approved", "rejected"]] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    approval_comment: Optional[str] = None
     
     # New fields for detailed estimation data
     envelope_data: Optional[EstimationEnvelope] = None

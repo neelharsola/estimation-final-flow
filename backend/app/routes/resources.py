@@ -34,8 +34,8 @@ async def list_resources() -> List[Resource]:
 
 @router.post("/resources", response_model=Resource)
 async def create_resource(payload: Resource, role: str = Depends(get_current_user_role_dep)) -> Resource:
-    if role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can create resources")
+    if role not in ("admin", "estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin, estimator, or ops can create resources")
     db = get_db()
     doc = payload.model_dump(by_alias=True, exclude={"id"})
     now = datetime.utcnow()
@@ -48,8 +48,8 @@ async def create_resource(payload: Resource, role: str = Depends(get_current_use
 
 @router.put("/resources/{resource_id}", response_model=Resource)
 async def update_resource(resource_id: str, updates: dict, role: str = Depends(get_current_user_role_dep)) -> Resource:
-    if role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can update resources")
+    if role not in ("admin", "estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin, estimator, or ops can update resources")
     db = get_db()
     updates = {k: v for k, v in updates.items() if k in {"name", "role", "notes", "rates"}}
     updates["updated_at"] = datetime.utcnow()

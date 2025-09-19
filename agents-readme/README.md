@@ -19,7 +19,7 @@
 
 ## Roles
 - Admin: all actions, can manage resources.
-- Estimator/Ops: can create estimations, update their own, select resources.
+- Estimator/Ops: can create estimations, update their own, create and select resources.
 
 ## Samples
 - See `agents-readme/sample.FILLED.xlsx` and `agents-readme/estimation_db.estimations.json`.

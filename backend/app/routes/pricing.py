@@ -213,6 +213,10 @@ async def update_project_resources(estimation_id: str, updates: List[ProjectReso
             update_item = update_map[role_name]
             resource["day_rate"] = float(update_item.day_rate)
             resource["currency"] = update_item.currency
+            if update_item.days is not None:
+                resource["days"] = int(update_item.days)
+            if update_item.count is not None:
+                resource["count"] = int(update_item.count)
             
     await db.estimations.update_one(
         {"_id": ObjectId(estimation_id)},

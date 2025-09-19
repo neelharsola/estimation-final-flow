@@ -48,6 +48,8 @@ class ProjectResourcePricing(BaseModel):
     day_rate: float
     currency: str = "USD"
     region: str = "default"
+    days: Optional[int] = None
+    count: Optional[int] = None
 
 
 

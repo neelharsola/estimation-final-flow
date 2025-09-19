@@ -23,6 +23,14 @@ from app.services.estimations import (
     update_estimation_title_client_desc,
     delete_estimation,
     update_envelope_data,
+    approve_estimation,
+    reject_estimation,
+    submit_for_approval,
+)
+from app.services.pricing_resources import (
+    get_pricing_resources,
+    update_pricing_resources,
+    sync_resources_from_envelope,
 )
 from app.services.excel import ExcelService
 from io import BytesIO
@@ -188,7 +196,15 @@ async def finalize_estimation(estimation_id: str, user_id: str = Depends(get_cur
     """Mark a temporary estimation as finalized so it becomes visible in listings."""
     db = get_db()
     from bson import ObjectId
-    await db.estimations.update_one({"_id": ObjectId(estimation_id)}, {"$set": {"is_temporary": False}})
+    from datetime import datetime
+    await db.estimations.update_one(
+        {"_id": ObjectId(estimation_id)}, 
+        {"$set": {
+            "is_temporary": False, 
+            "status": "under_review",
+            "updated_at": datetime.utcnow()
+        }}
+    )
     return {"ok": True}
 
 
@@ -410,6 +426,14 @@ async def set_envelope(
     est = await update_envelope_data(estimation_id, payload)
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
+    
+    # Sync resources to pricing_resources if they exist in envelope
+    if payload.get("resources"):
+        try:
+            await sync_resources_from_envelope(estimation_id, payload["resources"])
+        except Exception as e:
+            print(f"Failed to sync resources for estimation {estimation_id}: {e}")
+    
     return est
 
 
@@ -439,5 +463,76 @@ async def rollback(estimation_id: str, version_number: int, role: str = Depends(
     if est is None:
         raise HTTPException(status_code=404, detail="Not found")
     return est
+
+
+@router.post("/{estimation_id}/submit-approval", response_model=Estimation)
+async def submit_approval(estimation_id: str, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> Estimation:
+    """Submit estimation for admin approval"""
+    if role not in ("estimator", "ops"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only estimators and ops can submit for approval")
+    
+    # Check if user is the creator
+    est = await get_estimation(estimation_id)
+    if not est:
+        raise HTTPException(status_code=404, detail="Not found")
+    if est.creator_id != user_id and role != "ops":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only submit your own estimations for approval")
+    
+    est = await submit_for_approval(estimation_id)
+    if est is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return est
+
+
+@router.post("/{estimation_id}/approve", response_model=Estimation)
+async def approve(estimation_id: str, payload: dict, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> Estimation:
+    """Approve an estimation - admin only"""
+    if role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can approve estimations")
+    
+    comment = payload.get("comment", None)
+    est = await approve_estimation(estimation_id, user_id, comment)
+    if est is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return est
+
+
+@router.post("/{estimation_id}/reject", response_model=Estimation)
+async def reject(estimation_id: str, payload: dict, user_id: str = Depends(get_current_user_id), role: str = Depends(get_current_user_role_dep)) -> Estimation:
+    """Reject an estimation - admin only"""
+    if role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can reject estimations")
+    
+    comment = payload.get("comment", None)
+    est = await reject_estimation(estimation_id, user_id, comment)
+    if est is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return est
+
+
+@router.get("/{estimation_id}/pricing-resources")
+async def get_estimation_pricing_resources(estimation_id: str, role: str = Depends(get_current_user_role_dep)):
+    """Get pricing resources for an estimation"""
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    
+    try:
+        resources = await get_pricing_resources(estimation_id)
+        return [r.model_dump() for r in resources]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{estimation_id}/pricing-resources")
+async def update_estimation_pricing_resources(estimation_id: str, resources: list, role: str = Depends(get_current_user_role_dep)):
+    """Update pricing resources for an estimation"""
+    if role not in ("estimator", "ops", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    
+    try:
+        updated_resources = await update_pricing_resources(estimation_id, resources)
+        return [r.model_dump() for r in updated_resources]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 

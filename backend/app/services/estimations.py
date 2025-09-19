@@ -23,6 +23,17 @@ def _oid(id_str: str) -> ObjectId | None:
 
 async def create_estimation(est: Estimation) -> Estimation:
     db = get_db()
+    
+    # Check for duplicate project names (only for non-temporary estimations)
+    if not est.is_temporary:
+        existing = await db.estimations.find_one({
+            "title": est.title,
+            "$or": [{"is_temporary": {"$exists": False}}, {"is_temporary": False}]
+        })
+        if existing:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=f"An estimation with the project name '{est.title}' already exists. Please choose a different name.")
+    
     doc = est.model_dump(by_alias=True)
     if doc.get("_id") is None:
         del doc["_id"]
@@ -42,6 +53,9 @@ async def get_estimation(estimation_id: str) -> Optional[Estimation]:
     doc["_id"] = str(doc["_id"])  # serialize
     # add non-aliased id for frontend robustness
     doc["id"] = doc["_id"]
+    # Temporary compatibility: normalize invalid legacy status value
+    if doc.get("status") == "pending_review":
+        doc["status"] = "under_review"
     # attach estimator name for display
     try:
         creator = await db.users.find_one({"_id": ObjectId(str(doc.get("creator_id", "")))}, {"name": 1})
@@ -102,6 +116,9 @@ async def list_estimations(created_by: str | None = None) -> List[Estimation]:
     async for doc in db.estimations.find(query).sort("updated_at", -1):
         doc["_id"] = str(doc["_id"])  # serialize
         doc["id"] = doc["_id"]
+        # Temporary compatibility: normalize invalid legacy status value
+        if doc.get("status") == "pending_review":
+            doc["status"] = "under_review"
         # attach estimator name for display in list
         try:
             creator = await db.users.find_one({"_id": ObjectId(str(doc.get("creator_id", "")))}, {"name": 1})
@@ -256,6 +273,81 @@ async def rollback_version(estimation_id: str, version_number: int) -> Optional[
         {"_id": _oid(estimation_id)},
         {"$set": {"current_version": target.model_dump(), "updated_at": now}},
     )
+    return await get_estimation(estimation_id)
+
+
+async def approve_estimation(estimation_id: str, approver_id: str, comment: Optional[str] = None) -> Optional[Estimation]:
+    """Approve an estimation - only admin users can approve"""
+    db = get_db()
+    now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
+    
+    updates = {
+        "approval_status": "approved",
+        "approved_by": approver_id,
+        "approved_at": now,
+        "status": "approved",
+        "updated_at": now
+    }
+    if comment:
+        updates["approval_comment"] = comment
+    
+    result = await db.estimations.update_one(
+        {"_id": oid},
+        {"$set": updates}
+    )
+    if result.matched_count == 0:
+        return None
+    return await get_estimation(estimation_id)
+
+
+async def reject_estimation(estimation_id: str, approver_id: str, comment: Optional[str] = None) -> Optional[Estimation]:
+    """Reject an estimation - only admin users can reject"""
+    db = get_db()
+    now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
+    
+    updates = {
+        "approval_status": "rejected",
+        "approved_by": approver_id,
+        "approved_at": now,
+        "status": "rejected",
+        "updated_at": now
+    }
+    if comment:
+        updates["approval_comment"] = comment
+    
+    result = await db.estimations.update_one(
+        {"_id": oid},
+        {"$set": updates}
+    )
+    if result.matched_count == 0:
+        return None
+    return await get_estimation(estimation_id)
+
+
+async def submit_for_approval(estimation_id: str) -> Optional[Estimation]:
+    """Submit estimation for approval - changes status to pending_approval"""
+    db = get_db()
+    now = datetime.utcnow()
+    oid = _oid(estimation_id)
+    if oid is None:
+        return None
+    
+    result = await db.estimations.update_one(
+        {"_id": oid},
+        {"$set": {
+            "status": "pending_approval", 
+            "approval_status": "pending", 
+            "updated_at": now
+        }}
+    )
+    if result.matched_count == 0:
+        return None
     return await get_estimation(estimation_id)
 
 

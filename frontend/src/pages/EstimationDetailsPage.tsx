@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, ArrowLeft } from "lucide-react";
+import { Calendar, ArrowLeft, CheckCircle, XCircle, Send, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function EstimationDetailsPage() {
@@ -42,6 +42,10 @@ export default function EstimationDetailsPage() {
         clientName: full.client || "Unknown Client",
         description: full.description || "",
         status: full.status === "under_review" ? "pending_review" : full.status,
+        approval_status: full.approval_status,
+        approved_by: full.approved_by,
+        approved_at: full.approved_at,
+        approval_comment: full.approval_comment,
         estimator: full.estimator_name || "Unknown",
         estimatorId: full.creator_id || "",
         createdAt: new Date(full.created_at).toISOString().split('T')[0],
@@ -180,6 +184,21 @@ export default function EstimationDetailsPage() {
     }
   };
 
+  const onSubmitForApproval = async () => {
+    if (!id) return;
+    setSaving(true);
+    try {
+      await api.estimations.submitForApproval(id);
+      toast.success("Estimation submitted for approval!");
+      await loadEstimation(); // Refresh to get updated status
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to submit for approval");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6">Loading...</div>;
   }
@@ -287,7 +306,76 @@ export default function EstimationDetailsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      {/* Approval Status Card */}
+      {(estimation.approval_status === 'pending' || estimation.status === 'pending_approval') && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              Pending Approval
+            </CardTitle>
+            <CardDescription>
+              Your estimation has been submitted for admin approval.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+      
+      {estimation.approval_status === 'approved' && (
+        <Card className="border-green-200 bg-green-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Approved
+            </CardTitle>
+            <CardDescription>
+              {estimation.approved_at && (
+                <>Approved on {new Date(estimation.approved_at).toLocaleDateString()}</>
+              )}
+            </CardDescription>
+          </CardHeader>
+          {estimation.approval_comment && (
+            <CardContent>
+              <p className="text-sm"><strong>Admin Comment:</strong> {estimation.approval_comment}</p>
+            </CardContent>
+          )}
+        </Card>
+      )}
+      
+      {estimation.approval_status === 'rejected' && (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-600" />
+              Rejected
+            </CardTitle>
+            <CardDescription>
+              {estimation.approved_at && (
+                <>Rejected on {new Date(estimation.approved_at).toLocaleDateString()}</>
+              )}
+            </CardDescription>
+          </CardHeader>
+          {estimation.approval_comment && (
+            <CardContent>
+              <p className="text-sm"><strong>Admin Comment:</strong> {estimation.approval_comment}</p>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      <div className="flex justify-between items-center">
+        <div>
+          {/* Submit for Approval button - only show for estimators on their own draft/ready estimations */}
+          {(user?.role?.toLowerCase() === 'estimator' || user?.role?.toLowerCase() === 'ops') && 
+           estimation.estimatorId === user?.id && 
+           !estimation.approval_status && 
+           (estimation.status === 'draft' || estimation.status === 'ready_for_pricing' || estimation.status === 'pending_review') && (
+            <Button onClick={onSubmitForApproval} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Send className="w-4 h-4 mr-2" />
+              {saving ? 'Submitting...' : 'Submit for Approval'}
+            </Button>
+          )}
+        </div>
         <Button variant="outline" onClick={async () => {
           try {
             const envelope = estimation.envelope || { schema_version: "1.0", project: {}, rows: [] };
@@ -343,8 +431,8 @@ export default function EstimationDetailsPage() {
                 {rows.map((r: any, i: number) => (
                   <TableRow key={i}>
                     <TableCell>{i + 1}</TableCell>
-                    <TableCell onClick={() => startEdit(i, "platform")}>{
-                      isEditing(i, "platform") ? (
+                    <TableCell onClick={() => startEdit(i, "platform")}>
+                      {isEditing(i, "platform") ? (
                         <Select value={r.platform || ""} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, platform: value } : row)); stopEdit(); }}>
                           <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
                           <SelectContent>
@@ -353,31 +441,31 @@ export default function EstimationDetailsPage() {
                         </Select>
                       ) : (
                         <span className="cursor-pointer">{r.platform || "-"}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "module")}>{
-                      isEditing(i, "module") ? (
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => startEdit(i, "module")}>
+                      {isEditing(i, "module") ? (
                         <Input autoFocus value={r.module || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, module: e.target.value } : row))} />
                       ) : (
                         <span className="cursor-pointer">{r.module || "-"}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "component")}>{
-                      isEditing(i, "component") ? (
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => startEdit(i, "component")}>
+                      {isEditing(i, "component") ? (
                         <Input autoFocus value={r.component || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, component: e.target.value } : row))} />
                       ) : (
                         <span className="cursor-pointer">{r.component || "-"}</span>
-                      )
-                    }</TableCell>
-                    <TableCell className="max-w-[360px] whitespace-pre-wrap" onClick={() => startEdit(i, "feature")}>{
-                      isEditing(i, "feature") ? (
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap" onClick={() => startEdit(i, "feature")}>
+                      {isEditing(i, "feature") ? (
                         <Textarea autoFocus rows={2} value={r.feature || ""} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, feature: e.target.value } : row))} />
                       ) : (
                         <span className="cursor-pointer">{r.feature || "-"}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "make_or_reuse")}>{
-                      isEditing(i, "make_or_reuse") ? (
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => startEdit(i, "make_or_reuse")}>
+                      {isEditing(i, "make_or_reuse") ? (
                         <Select value={r.make_or_reuse || "Make"} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, make_or_reuse: value } : row)); stopEdit(); }}>
                           <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
@@ -386,14 +474,13 @@ export default function EstimationDetailsPage() {
                         </Select>
                       ) : (
                         <span className="cursor-pointer">{r.make_or_reuse || "Make"}</span>
-                      )
-                    }
-                    {r.reuse_source ? (
-                      <span className="text-xs text-muted-foreground block">{r.reuse_source}</span>
-                    ) : null}
+                      )}
+                      {r.reuse_source && (
+                        <span className="text-xs text-muted-foreground block">{r.reuse_source}</span>
+                      )}
                     </TableCell>
-                    <TableCell onClick={() => startEdit(i, "complexity")}>{
-                      isEditing(i, "complexity") ? (
+                    <TableCell onClick={() => startEdit(i, "complexity")}>
+                      {isEditing(i, "complexity") ? (
                         <Select value={r.complexity || "Average"} onValueChange={(value) => { setRows(prev => prev.map((row, idx) => idx === i ? { ...row, complexity: value } : row)); stopEdit(); }}>
                           <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
@@ -402,15 +489,15 @@ export default function EstimationDetailsPage() {
                         </Select>
                       ) : (
                         <span className="cursor-pointer">{r.complexity || "Average"}</span>
-                      )
-                    }</TableCell>
-                    <TableCell onClick={() => startEdit(i, "num_components")}>{
-                      isEditing(i, "num_components") ? (
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => startEdit(i, "num_components")}>
+                      {isEditing(i, "num_components") ? (
                         <Input autoFocus type="number" className="w-24 text-right" value={r.num_components ?? 0} onFocus={(e) => (e.target as HTMLInputElement).select()} onBlur={stopEdit} onChange={(e) => setRows(prev => prev.map((row, idx) => idx === i ? { ...row, num_components: Number(e.target.value) } : row))} />
                       ) : (
                         <span className="cursor-pointer">{r.num_components ?? 0}</span>
-                      )
-                    }</TableCell>
+                      )}
+                    </TableCell>
                     
                     
                     

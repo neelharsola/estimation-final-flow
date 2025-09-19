@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import EstimationsPage from "./pages/EstimationsNew";
 import EstimationDetailsPage from "./pages/EstimationDetailsPage";
 import EstimatePage from "./pages/EstimatePage";
@@ -58,6 +59,26 @@ const App = () => (
                   <Dashboard />
                 </AppLayout>
               </RequireAuth>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <AppLayout>
+                  <Dashboard />
+                </AppLayout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin-dashboard"
+            element={
+              <RequireRole roles={["admin"]}>
+                <AppLayout>
+                  <AdminDashboard />
+                </AppLayout>
+              </RequireRole>
             }
           />
           <Route

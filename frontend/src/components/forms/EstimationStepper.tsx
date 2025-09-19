@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import NewSimpleRoleDialog from "./NewSimpleRoleDialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 interface ProjectInfo {
@@ -124,17 +125,29 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   const [contingencyPct, setContingencyPct] = useState<number>(0);
   const [allResources, setAllResources] = useState<any[]>([]);
   const [fx, setFx] = useState<{ base: string; rates: Record<string, number> }>({ base: "USD", rates: { AED: 3.6725, INR: 87.78, GBP: 0.73, USD: 1 } });
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+    const canManageResources = ["admin", "estimator", "ops"].includes(String(user?.role || "").toLowerCase());
+  const [isNewResourceDialogOpen, setIsNewResourceDialogOpen] = useState(false);
   
   // Debug logging
-  console.log("Current user:", user, "isAdmin:", isAdmin);
+  console.log("Current user:", user, "canManageResources:", canManageResources);
   const [newRoleName, setNewRoleName] = useState("");
 
   const handleCreateNewRole = async (roleName: string) => {
+    const trimmedRoleName = roleName.trim();
+    if (!trimmedRoleName) {
+      sonnerToast.error("Role name cannot be empty.");
+      return;
+    }
+    if (allResources.some(r => r.role.toLowerCase() === trimmedRoleName.toLowerCase())) {
+      sonnerToast.error(`Role '${trimmedRoleName}' already exists.`);
+      return;
+    }
     try {
-      const created = await api.resources.create({ name: roleName, role: roleName, rates: {} });
+      const created = await api.resources.create({ name: trimmedRoleName, role: trimmedRoleName, rates: {} });
       setAllResources(prev => [created, ...prev]);
-      sonnerToast.success(`Role '${roleName}' created successfully.`);
+      sonnerToast.success(`Role '${trimmedRoleName}' created successfully.`);
+      setIsNewResourceDialogOpen(false);
+      setNewRoleName("");
     } catch (e: any) {
       sonnerToast.error(e?.message || "Failed to create new role.");
     }
@@ -316,11 +329,61 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
 
   const finalize = async () => {
     if (finalized) return;
+    
+    // Check for duplicate project names before finalizing
+    if (!estimationData.project.name.trim()) {
+      sonnerToast.error("Project name is required");
+      return;
+    }
+    
     try {
+      // Check for existing estimations with the same name
+      const allEstimations = await api.estimations.list();
+      const duplicateExists = allEstimations.some(e => 
+        e.title.toLowerCase() === estimationData.project.name.trim().toLowerCase() && 
+        e.id !== estimationId // Allow updating current estimation
+      );
+      
+      if (duplicateExists) {
+        sonnerToast.error(
+          "An estimation with this project name already exists. Please choose a different name.",
+          { duration: 5000 }
+        );
+        // Navigate back to first step to allow changing the name
+        setCurrentStep(1);
+        return;
+      }
+      
       // Pass resources to persistEnvelope to create/update atomically
       const id = await persistEnvelope(estimationData, resources);
       if (!id) {
         throw new Error("Failed to create estimation");
+      }
+      
+      // Save pricing resources if available
+      if (pricingRows.length > 0) {
+        try {
+          await api.estimations.updatePricingResources(id, pricingRows);
+        } catch (error) {
+          console.error("Failed to save pricing resources:", error);
+        }
+      } else if (resources.length > 0) {
+        // Convert basic resources to pricing format with default values
+        const defaultPricingResources = resources.map(r => ({
+          role: r.role,
+          days: r.days,
+          count: r.count,
+          hourly_rate: 0,
+          day_rate: 0,
+          currency: "USD",
+          region: "default",
+          total_cost: 0
+        }));
+        try {
+          await api.estimations.updatePricingResources(id, defaultPricingResources);
+        } catch (error) {
+          console.error("Failed to save default pricing resources:", error);
+        }
       }
       
       // Finalize the estimation
@@ -333,7 +396,13 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
       }
       onOpenChange(false);
     } catch (e: any) {
-      sonnerToast.error(e?.message || "Failed to finalize estimation");
+      if (e?.message?.includes("already exists")) {
+        sonnerToast.error(e.message, { duration: 5000 });
+        // Navigate back to first step to allow changing the name
+        setCurrentStep(1);
+      } else {
+        sonnerToast.error(e?.message || "Failed to finalize estimation");
+      }
     }
   };
 
@@ -400,7 +469,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
   };
 
   const quickCreateResource = async () => {
-    if (!isAdmin) return;
+    if (!canManageResources) return;
     try {
       const name = window.prompt("Resource name") || "";
       const role = window.prompt("Role") || "";
@@ -702,6 +771,10 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                         <TableCell>{idx + 1}</TableCell>
                         <TableCell>
                           <Select value={r.role} onValueChange={(val) => {
+                            if (val === '__add_new__') {
+                              setIsNewResourceDialogOpen(true);
+                              return;
+                            }
                             setResources(prev => prev.map((row, i) => i === idx ? { ...row, role: val } : row))
                           }}>
                             <SelectTrigger><SelectValue placeholder="Select resource" /></SelectTrigger>
@@ -709,42 +782,10 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                               {availableResources.map((ar: any) => (
                                 <SelectItem key={ar.id || ar._id} value={ar.role}>{ar.role}</SelectItem>
                               ))}
-                              {isAdmin && (
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <div className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground">
-                                      + Add new resource…
-                                    </div>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80">
-                                    <div className="grid gap-4">
-                                      <div className="space-y-2">
-                                        <h4 className="font-medium leading-none">Add New Role</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                          Create a new resource role.
-                                        </p>
-                                      </div>
-                                      <div className="grid gap-2">
-                                        <Label htmlFor="new-role-name">Role Name</Label>
-                                        <Input
-                                          id="new-role-name"
-                                          value={newRoleName}
-                                          onChange={(e) => setNewRoleName(e.target.value)}
-                                          className="col-span-2 h-8"
-                                        />
-                                        <Button
-                                          onClick={() => {
-                                            handleCreateNewRole(newRoleName);
-                                            setNewRoleName("");
-                                          }}
-                                          disabled={!newRoleName.trim()}
-                                        >
-                                          Create
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
+                              {canManageResources && (
+                                <SelectItem value="__add_new__" className="text-primary focus:text-primary">
+                                  + Add new resource...
+                                </SelectItem>
                               )}
                             </SelectContent>
                           </Select>
@@ -814,10 +855,6 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Working Days/Month:</span>
                     <span>20</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Contingency:</span>
-                    <span>10%</span>
                   </div>
                 </div>
               </Card>
@@ -943,9 +980,8 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                               <Select 
                                 value={row.role} 
                                 onValueChange={(newRole) => {
-                                  if (newRole === "__modal__") { 
-                                    console.log("Opening new resource dialog from pricing"); 
-                                    setNewResOpen(true); 
+                                  if (newRole === '__add_new__') { 
+                                    setIsNewResourceDialogOpen(true); 
                                     return; 
                                   }
                                   setPricingRows(prev => prev.map((r, i) => 
@@ -963,7 +999,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                                       {ar.role}
                                     </SelectItem>
                                   ))}
-                                  {isAdmin && <SelectItem value="__modal__">+ Add new resource…</SelectItem>}
+                                  {canManageResources && <SelectItem value="__add_new__" className="text-primary focus:text-primary">+ Add new resource...</SelectItem>}
                                 </SelectContent>
                               </Select>
                             </TableCell>
@@ -1174,32 +1210,7 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
                 </Card>
               </div>
 
-              <div className="flex justify-end">
-                <Button onClick={async () => {
-                  try {
-                    const id = estimationId || await persistEnvelope(estimationData, resources);
-                    const rows = pricingRows.length ? pricingRows : resources.map(r => ({ role: r.role, days: r.days, count: r.count, hourlyRate: 0, dayRate: 0, totalCost: 0 }));
-                    if (id) {
-                      await api.pricing.projects.updateResources(id, rows.map(r => ({ role: r.role, day_rate: r.dayRate, currency: "USD", region: "default" })));
-                      await api.pricing.projects.updateSummary(id, {
-                        currency: "USD",
-                        subtotal,
-                        discount_pct: discountPct,
-                        contingency_pct: contingencyPct,
-                        final_total: finalTotal,
-                        total_hours: totalHours,
-                        items: rows.map(r => ({ role: r.role, region: "default", days: r.days * r.count, rate: r.dayRate, currency: "USD", cost: r.totalCost }))
-                      });
-                    }
-                    await finalize();
-                  } catch (e) {
-                    sonnerToast.error("Failed to save pricing");
-                  }
-                }} className="gap-2" disabled={finalized}>
-                  <CheckCircle className="w-4 h-4" />
-                  {finalized ? "Finalized" : "Finalize Estimation"}
-                </Button>
-              </div>
+              
             </div>
           );
         }
@@ -1281,7 +1292,37 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
             </Button>
             {currentStep < steps.length && (
               <Button
-                onClick={() => {
+                onClick={async () => {
+                  if (currentStep === 1) {
+                    if (!estimationData.project.name.trim()) {
+                      sonnerToast.error("Project Name is required.");
+                      return;
+                    }
+                    if (!estimationData.project.client.trim()) {
+                      sonnerToast.error("Client name is required.");
+                      return;
+                    }
+                    try {
+                      const allEstimations = await api.estimations.list();
+                      const duplicateExists = allEstimations.some(e => 
+                        e.title.toLowerCase() === estimationData.project.name.trim().toLowerCase() && 
+                        e.id !== estimationId // Allow updating current estimation
+                      );
+                      if (duplicateExists) {
+                        sonnerToast.error(
+                          "An estimation with this project name already exists. Please choose a different name.",
+                          { duration: 5000 }
+                        );
+                        return;
+                      }
+                    } catch (error) {
+                      console.error("Failed to check for existing estimations", error);
+                      // Don't proceed if we can't validate uniqueness
+                      sonnerToast.error("Unable to validate project name uniqueness. Please try again.");
+                      return;
+                    }
+                  }
+
                   const nextStep = Math.min(steps.length, currentStep + 1);
                   // Auto-initialize pricing rows from resources when entering step 5
                   if (nextStep === 5 && pricingRows.length === 0 && resources.length > 0) {
@@ -1309,6 +1350,12 @@ export default function EstimationStepper({ open, onOpenChange, onComplete }: Es
         <div className="min-h-[400px]">
           {renderStepContent()}
         </div>
+
+                <NewSimpleRoleDialog
+          open={isNewResourceDialogOpen}
+          onOpenChange={setIsNewResourceDialogOpen}
+          onComplete={handleCreateNewRole}
+        />
 
         <DialogFooter>
           <div className="flex justify-between w-full">
